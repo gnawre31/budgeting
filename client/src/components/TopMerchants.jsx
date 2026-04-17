@@ -84,7 +84,7 @@ export default function TopMerchants({ selectedMonth, viewMode }) {
                                         </div>
                                         <div className="h-1 bg-gray-100 rounded-full">
                                             <div
-                                                className="h-full bg-violet-400 rounded-full transition-all duration-700"
+                                                className="h-full bg-purple-400 rounded-full transition-all duration-700"
                                                 style={{ width: `${barWidth}%` }}
                                             />
                                         </div>

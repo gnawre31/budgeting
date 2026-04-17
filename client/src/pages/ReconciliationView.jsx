@@ -72,10 +72,10 @@ export default function ReconciliationView() {
             const selfRatio = parent.self_amount / (parent.amount || 1);
             const partnerRatio = parent.partner_amount / (parent.amount || 1);
 
-            // New Net Total
+            // New Net Total — derive partner from (total - self) to avoid rounding drift
             const newTotalAmount = Math.max(0, parent.amount - selectedChild.amount);
             const newSelf = Number((newTotalAmount * selfRatio).toFixed(2));
-            const newPartner = Number((newTotalAmount * partnerRatio).toFixed(2));
+            const newPartner = Number((newTotalAmount - newSelf).toFixed(2));
 
             // Update Child
             await supabase.from("transactions").update({ parent_id: parentId }).eq("id", selectedChild.id);
@@ -99,6 +99,7 @@ export default function ReconciliationView() {
     };
 
     const handleUnlink = async (child) => {
+        if (!window.confirm(`Unlink "${child.merchant}" from its parent? The parent's amount will be restored.`)) return;
         try {
             const { data: parent } = await supabase
                 .from("transactions")
@@ -110,9 +111,9 @@ export default function ReconciliationView() {
                 const selfRatio = parent.self_amount / (parent.amount || 1);
                 const partnerRatio = parent.partner_amount / (parent.amount || 1);
 
-                const restoredAmount = parent.amount + child.amount;
+                const restoredAmount = Number((parent.amount + child.amount).toFixed(2));
                 const newSelf = Number((restoredAmount * selfRatio).toFixed(2));
-                const newPartner = Number((restoredAmount * partnerRatio).toFixed(2));
+                const newPartner = Number((restoredAmount - newSelf).toFixed(2));
 
                 await supabase.from("transactions").update({
                     amount: restoredAmount,
@@ -151,7 +152,7 @@ export default function ReconciliationView() {
                             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                                 Needs Linking
                                 {unlinked.length > 0 && (
-                                    <span className="ml-2 px-2 py-0.5 rounded-full bg-amber-100 text-amber-600 font-medium">
+                                    <span className="ml-2 px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">
                                         {unlinked.length}
                                     </span>
                                 )}
@@ -176,7 +177,7 @@ export default function ReconciliationView() {
                                         </p>
                                         <p className="text-xs text-gray-400 mt-0.5">{tx.date}</p>
                                     </div>
-                                    <span className={`text-sm font-semibold ${selectedChild?.id === tx.id ? 'text-blue-600' : 'text-green-600'}`}>
+                                    <span className={`text-sm font-semibold ${selectedChild?.id === tx.id ? 'text-blue-600' : 'text-violet-500'}`}>
                                         +${tx.amount.toFixed(2)}
                                     </span>
                                 </button>

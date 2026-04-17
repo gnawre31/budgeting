@@ -4,6 +4,7 @@ import { getCategorizationRules, createCategorizationRule, deleteCategorizationR
 export default function RuleManager() {
     const [rules, setRules] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
     const [newRule, setNewRule] = useState({
         keyword: "",
         transaction_type: "Expense",
@@ -24,25 +25,31 @@ export default function RuleManager() {
         e.preventDefault();
         if (!newRule.keyword) return;
         setLoading(true);
+        setError(null);
         try {
             await createCategorizationRule(newRule);
             setNewRule({ keyword: "", transaction_type: "Expense", category: "Groceries", rename_to: "" });
             await loadRules();
-        } catch (err) { alert(err.message); }
+        } catch (err) { setError(err.message || "Failed to add rule."); }
         finally { setLoading(false); }
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm("Delete this rule?")) return;
+        setError(null);
         try {
             await deleteCategorizationRule(id);
             await loadRules();
-        } catch (err) { alert(err.message); }
+        } catch (err) { setError(err.message || "Failed to delete rule."); }
     };
 
     return (
         <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6">
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-5">Automation Rules</h2>
+
+            {error && (
+                <div className="mb-4 bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 text-sm text-rose-600">{error}</div>
+            )}
 
             {/* Rule Form */}
             <form onSubmit={handleAddRule} className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
@@ -113,7 +120,7 @@ export default function RuleManager() {
                         </div>
                         <button
                             onClick={() => handleDelete(rule.id)}
-                            className="text-sm font-medium text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-all px-2"
+                            className="text-sm font-medium text-rose-500 hover:text-rose-700 opacity-0 group-hover:opacity-100 transition-all px-2"
                         >
                             Remove
                         </button>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { createCategorizationRule } from "../services/transactionService";
 
@@ -14,6 +14,7 @@ export default function TransactionsPage() {
     const [editingCell, setEditingCell] = useState(null);
     const [showReviewModal, setShowReviewModal] = useState(false);
     const [showParentModal, setShowParentModal] = useState(false);
+    const [parentsLoading, setParentsLoading] = useState(false);
     const [activeChildId, setActiveChildId] = useState(null);
     const [potentialParents, setPotentialParents] = useState([]);
 
@@ -30,6 +31,8 @@ export default function TransactionsPage() {
     const emptyForm = { date: today, merchant: "", type: "Expense", category: "Other", amount: "", self_amount: "", partner_amount: "", exclude_from_report: false, description: "" };
     const [insertForm, setInsertForm] = useState(emptyForm);
     const [inserting, setInserting] = useState(false);
+    const [insertError, setInsertError] = useState(null);
+    const [saveError, setSaveError] = useState(null);
 
     const fetchTransactions = useCallback(async () => {
         setLoading(true);
@@ -62,7 +65,12 @@ export default function TransactionsPage() {
         setLoading(false);
     }, [filters]);
 
-    useEffect(() => { fetchTransactions(); }, [fetchTransactions]);
+    const debounceRef = useRef(null);
+    useEffect(() => {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => fetchTransactions(), 300);
+        return () => clearTimeout(debounceRef.current);
+    }, [fetchTransactions]);
 
     const getReimbursementTotal = (parentId) =>
         transactions.reduce((sum, other) => {
@@ -133,6 +141,7 @@ export default function TransactionsPage() {
     };
 
     const handleInsertField = (field, value) => {
+        setInsertError(null);
         setInsertForm(prev => {
             const next = { ...prev, [field]: value };
             if (field === "amount") { const n = parseFloat(value) || 0; next.self_amount = String(n); next.partner_amount = "0"; }
@@ -145,10 +154,17 @@ export default function TransactionsPage() {
 
     const handleInsertSubmit = async () => {
         if (!insertForm.merchant.trim() || !insertForm.amount) return;
+        const amount = Math.abs(parseFloat(insertForm.amount));
+        const selfAmt = parseFloat(insertForm.self_amount) || amount;
+        const partnerAmt = parseFloat(insertForm.partner_amount) || 0;
+        if (Math.abs(selfAmt + partnerAmt - amount) > 0.01) {
+            setInsertError(`Self (${selfAmt.toFixed(2)}) + Partner (${partnerAmt.toFixed(2)}) must equal Total (${amount.toFixed(2)})`);
+            return;
+        }
         setInserting(true);
+        setInsertError(null);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            const amount = Math.abs(parseFloat(insertForm.amount));
             const { error } = await supabase.from("transactions").insert({
                 user_id: user.id,
                 date: insertForm.date,
@@ -157,8 +173,8 @@ export default function TransactionsPage() {
                 type: insertForm.type,
                 category: insertForm.category,
                 amount,
-                self_amount: parseFloat(insertForm.self_amount) || amount,
-                partner_amount: parseFloat(insertForm.partner_amount) || 0,
+                self_amount: selfAmt,
+                partner_amount: partnerAmt,
                 original_amount: amount,
                 exclude_from_report: insertForm.exclude_from_report,
                 description: insertForm.description || null,
@@ -167,12 +183,13 @@ export default function TransactionsPage() {
             setShowInsertModal(false);
             setInsertForm(emptyForm);
             await fetchTransactions();
-        } catch (err) { alert(err.message); }
+        } catch (err) { setInsertError(err.message); }
         finally { setInserting(false); }
     };
 
     const handleConfirmSave = async () => {
         setLoading(true);
+        setSaveError(null);
         try {
             const affectedIds = new Set(Object.keys(pendingChanges));
             Object.keys(pendingChanges).forEach(id => {
@@ -210,13 +227,15 @@ export default function TransactionsPage() {
                 delete payload._parent_name; delete payload._isFlipped;
                 if (!hasLinks || isReimb) payload.original_amount = finalAmount;
 
-                await supabase.from("transactions").update(payload).eq("id", id);
+                const { error } = await supabase.from("transactions").update(payload).eq("id", id);
+                if (error) throw error;
             }
             setShowReviewModal(false);
             setRuleSuggestion(null);
             await fetchTransactions();
-        } catch (err) { alert(err.message); }
-        finally { setLoading(false); }
+        } catch (err) {
+            setSaveError(err.message);
+        } finally { setLoading(false); }
     };
 
     const allSelected = transactions.length > 0 && selectedIds.size === transactions.length;
@@ -224,9 +243,56 @@ export default function TransactionsPage() {
     const hasPending = Object.keys(pendingChanges).length > 0;
 
     const filterInputCls = "bg-gray-100 rounded-xl px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none border border-transparent focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20 transition-all";
+    const modalInputCls = "w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none border border-transparent focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20 transition-all";
+
+    // Shared per-tx derived values used in both card and table
+    const deriveTx = (tx) => {
+        const changes = pendingChanges[tx.id] || {};
+        const curCat = changes.category ?? tx.category;
+        const isSelected = selectedIds.has(tx.id);
+        const isDirty = Object.keys(changes).length > 0;
+        const originalRef = Math.abs(tx.original_amount ?? tx.amount ?? 0);
+        const totalReimb = getReimbursementTotal(tx.id);
+        const liveNet = curCat === "Reimbursement"
+            ? Math.abs(changes.amount !== undefined ? changes.amount : tx.amount)
+            : changes.amount !== undefined ? Math.abs(changes.amount) : Math.max(0, originalRef - totalReimb);
+        let displaySelf = Math.abs(changes.self_amount !== undefined ? changes.self_amount : (tx.self_amount ?? 0));
+        let displayPartner = Math.abs(changes.partner_amount !== undefined ? changes.partner_amount : (tx.partner_amount ?? 0));
+        if (Math.abs(liveNet - (displaySelf + displayPartner)) > 0.01) { displaySelf = liveNet; displayPartner = 0; }
+        return { changes, curCat, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner };
+    };
+
+    const openParentModal = async (txId) => {
+        setActiveChildId(txId);
+        setPotentialParents([]);
+        setParentsLoading(true);
+        setShowParentModal(true);
+        const { data } = await supabase.from("transactions").select("id, date, merchant, amount, original_amount").eq("type", "Expense").neq("id", txId).order("date", { ascending: false }).limit(20);
+        setPotentialParents(data || []);
+        setParentsLoading(false);
+    };
+
+    const renderNumInput = (tx, field, value, highlight = false) => (
+        <input
+            type="number"
+            value={editingCell?.id === tx.id && editingCell?.field === field ? editingCell.value : value.toFixed(2)}
+            className={`${inputCls} text-right font-mono w-full ${highlight ? 'text-blue-500' : ''}`}
+            onFocus={() => setEditingCell({ id: tx.id, field, value: value.toString() })}
+            onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+            onBlur={() => {
+                const n = parseFloat(editingCell?.value);
+                if (!isNaN(n)) stageChange(tx.id, field, n);
+                setEditingCell(null);
+            }}
+            onKeyDown={e => {
+                if (e.key === 'Enter') e.target.blur();
+                if (e.key === 'Escape') { setEditingCell(null); e.target.blur(); }
+            }}
+        />
+    );
 
     return (
-        <div className="max-w-[98%] mx-auto px-4 sm:px-6 pt-8 pb-16">
+        <div className="max-w-[98%] mx-auto px-3 sm:px-6 pt-6 sm:pt-8 pb-24">
             {loading && (
                 <div className="fixed inset-0 bg-white/50 backdrop-blur-sm z-[200] flex items-center justify-center">
                     <div className="bg-white border border-gray-200 shadow-lg rounded-2xl px-6 py-3 flex items-center gap-3">
@@ -237,12 +303,12 @@ export default function TransactionsPage() {
             )}
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">Transactions</h1>
                     <p className="text-sm text-gray-500 mt-0.5">Edit, manage, and review all records</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                     <button
                         onClick={() => setShowInsertModal(true)}
                         className="bg-gray-100 hover:bg-gray-200 text-gray-900 text-sm font-medium px-4 py-2 rounded-xl transition-colors"
@@ -252,13 +318,18 @@ export default function TransactionsPage() {
                     {hasPending && (
                         <>
                             <button
-                                onClick={() => { setPendingChanges({}); setSelectedIds(new Set()); }}
+                                onClick={() => {
+                                    if (window.confirm(`Discard ${Object.keys(pendingChanges).length} unsaved change${Object.keys(pendingChanges).length !== 1 ? 's' : ''}?`)) {
+                                        setPendingChanges({});
+                                        setSelectedIds(new Set());
+                                    }
+                                }}
                                 className="text-sm font-medium text-gray-500 hover:text-gray-900 px-3 py-2 transition-colors"
                             >
                                 Discard
                             </button>
                             <button
-                                onClick={() => setShowReviewModal(true)}
+                                onClick={() => { setSaveError(null); setShowReviewModal(true); }}
                                 className="bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium px-5 py-2 rounded-full transition-colors shadow-sm"
                             >
                                 Save {Object.keys(pendingChanges).length} change{Object.keys(pendingChanges).length !== 1 ? 's' : ''}
@@ -290,85 +361,184 @@ export default function TransactionsPage() {
 
             {/* Filters */}
             <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-4 mb-4">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <input type="text" placeholder="Search merchant…" className={filterInputCls} value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
-                    <select className={filterInputCls} value={filters.type} onChange={e => setFilters(p => ({ ...p, type: e.target.value }))}>
+                <div className="flex flex-wrap gap-2 items-center">
+                    <input type="text" placeholder="Search merchant…"
+                        className={`${filterInputCls} flex-[2_1_160px] min-w-0`}
+                        value={filters.search} onChange={e => setFilters(p => ({ ...p, search: e.target.value }))} />
+                    <select className={`${filterInputCls} flex-[1_1_120px] min-w-0`}
+                        value={filters.type} onChange={e => setFilters(p => ({ ...p, type: e.target.value }))}>
                         <option value="">All types</option>
                         {TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
                     </select>
-                    <div className="flex gap-2">
-                        <input type={filters.startDate ? "date" : "text"} placeholder="Start date" className={filterInputCls}
-                            value={filters.startDate} onFocus={e => e.target.type = "date"}
-                            onBlur={e => { if (!e.target.value) e.target.type = "text"; }}
-                            onChange={e => setFilters(p => ({ ...p, startDate: e.target.value }))} />
-                        <input type={filters.endDate ? "date" : "text"} placeholder="End date" className={filterInputCls}
-                            value={filters.endDate} onFocus={e => e.target.type = "date"}
-                            onBlur={e => { if (!e.target.value) e.target.type = "text"; }}
-                            onChange={e => setFilters(p => ({ ...p, endDate: e.target.value }))} />
-                    </div>
-                    <div className="flex gap-2 items-center">
-                        <input type="number" placeholder="Min $" className={filterInputCls} value={filters.minAmount} onChange={e => setFilters(p => ({ ...p, minAmount: e.target.value }))} />
-                        <input type="number" placeholder="Max $" className={filterInputCls} value={filters.maxAmount} onChange={e => setFilters(p => ({ ...p, maxAmount: e.target.value }))} />
-                        <button onClick={() => setFilters({ search: "", type: "", category: "", startDate: "", endDate: "", minAmount: "", maxAmount: "" })}
-                            className="text-xs font-medium text-gray-400 hover:text-gray-700 shrink-0 transition-colors">
-                            Reset
-                        </button>
-                    </div>
+                    <input type={filters.startDate ? "date" : "text"} placeholder="Start date"
+                        className={`${filterInputCls} flex-[1_1_130px] min-w-0`}
+                        value={filters.startDate} onFocus={e => e.target.type = "date"}
+                        onBlur={e => { if (!e.target.value) e.target.type = "text"; }}
+                        onChange={e => setFilters(p => ({ ...p, startDate: e.target.value }))} />
+                    <input type={filters.endDate ? "date" : "text"} placeholder="End date"
+                        className={`${filterInputCls} flex-[1_1_130px] min-w-0`}
+                        value={filters.endDate} onFocus={e => e.target.type = "date"}
+                        onBlur={e => { if (!e.target.value) e.target.type = "text"; }}
+                        onChange={e => setFilters(p => ({ ...p, endDate: e.target.value }))} />
+                    <input type="number" placeholder="Min $"
+                        className={`${filterInputCls} flex-[1_1_80px] min-w-0`}
+                        value={filters.minAmount} onChange={e => setFilters(p => ({ ...p, minAmount: e.target.value }))} />
+                    <input type="number" placeholder="Max $"
+                        className={`${filterInputCls} flex-[1_1_80px] min-w-0`}
+                        value={filters.maxAmount} onChange={e => setFilters(p => ({ ...p, maxAmount: e.target.value }))} />
+                    <button onClick={() => setFilters({ search: "", type: "", category: "", startDate: "", endDate: "", minAmount: "", maxAmount: "" })}
+                        className="text-xs font-medium text-gray-400 hover:text-gray-700 shrink-0 transition-colors px-1">
+                        Reset
+                    </button>
                 </div>
             </div>
 
-            {/* Table */}
-            <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
+            {/* ─── Mobile card list (hidden on md+) ─── */}
+            <div className="md:hidden space-y-2">
+                {transactions.length === 0 && !loading ? (
+                    <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-4 py-16 text-center text-sm text-gray-400">
+                        No transactions found.{" "}
+                        <button onClick={() => setShowInsertModal(true)} className="text-blue-500 hover:underline">Add one manually</button>.
+                    </div>
+                ) : transactions.map(tx => {
+                    const { changes, curCat, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner } = deriveTx(tx);
+                    const fmt = (n) => `$${n.toFixed(2)}`;
+
+                    return (
+                        <div key={tx.id}
+                            className={`bg-white rounded-2xl border shadow-sm px-4 py-3.5 transition-colors ${isSelected ? 'border-blue-200 bg-blue-50/40' : isDirty ? 'border-slate-200 bg-slate-50/40' : 'border-gray-200/60'}`}>
+                            {/* Top row: checkbox + merchant + amount */}
+                            <div className="flex items-start gap-2.5">
+                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx.id)}
+                                    className="mt-0.5 h-3.5 w-3.5 cursor-pointer accent-blue-500 shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-0.5">
+                                        {tx._isFlipped && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" title="Partner's transaction" />}
+                                        {isDirty && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" title="Unsaved changes" />}
+                                        <input
+                                            type="text"
+                                            value={changes.merchant ?? tx.merchant}
+                                            onChange={e => stageChange(tx.id, "merchant", e.target.value)}
+                                            className="font-semibold text-gray-900 text-sm bg-transparent outline-none w-full truncate focus:bg-gray-100 rounded px-1 py-0.5 -mx-1"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                        <input type="date" value={changes.date ?? tx.date}
+                                            onChange={e => stageChange(tx.id, "date", e.target.value)}
+                                            className="text-xs text-gray-400 bg-transparent outline-none focus:bg-gray-100 rounded px-1 py-0.5 -mx-1" />
+                                        <span className="text-gray-200">·</span>
+                                        <select value={changes.type ?? tx.type}
+                                            onChange={e => stageChange(tx.id, "type", e.target.value)}
+                                            className="text-xs text-gray-500 bg-transparent outline-none focus:bg-gray-100 rounded px-1 py-0.5 -mx-1 cursor-pointer">
+                                            {TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
+                                        </select>
+                                        <span className="text-gray-200">·</span>
+                                        <select value={curCat}
+                                            onChange={e => stageChange(tx.id, "category", e.target.value)}
+                                            className="text-xs text-gray-500 bg-transparent outline-none focus:bg-gray-100 rounded px-1 py-0.5 -mx-1 cursor-pointer max-w-[130px]">
+                                            {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                    <p className={`text-base font-semibold tabular-nums ${totalReimb > 0 ? 'text-blue-500' : 'text-gray-900'}`}>{fmt(liveNet)}</p>
+                                    {totalReimb > 0 && curCat !== "Reimbursement" && (
+                                        <p className="text-[10px] text-gray-400">Base {fmt(originalRef)}</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Split row */}
+                            <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3">
+                                <div>
+                                    <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Self</label>
+                                    <input
+                                        type="number"
+                                        value={editingCell?.id === tx.id && editingCell?.field === "self_amount" ? editingCell.value : displaySelf.toFixed(2)}
+                                        className="w-full text-sm font-mono text-indigo-500 bg-gray-50 rounded-lg px-2.5 py-1.5 outline-none border border-transparent focus:bg-white focus:border-gray-200"
+                                        onFocus={() => setEditingCell({ id: tx.id, field: "self_amount", value: displaySelf.toString() })}
+                                        onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                                        onBlur={() => { const n = parseFloat(editingCell?.value); if (!isNaN(n)) stageChange(tx.id, "self_amount", n); setEditingCell(null); }}
+                                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setEditingCell(null); e.target.blur(); } }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider block mb-1">Partner</label>
+                                    <input
+                                        type="number"
+                                        value={editingCell?.id === tx.id && editingCell?.field === "partner_amount" ? editingCell.value : displayPartner.toFixed(2)}
+                                        className="w-full text-sm font-mono text-teal-500 bg-gray-50 rounded-lg px-2.5 py-1.5 outline-none border border-transparent focus:bg-white focus:border-gray-200"
+                                        onFocus={() => setEditingCell({ id: tx.id, field: "partner_amount", value: displayPartner.toString() })}
+                                        onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
+                                        onBlur={() => { const n = parseFloat(editingCell?.value); if (!isNaN(n)) stageChange(tx.id, "partner_amount", n); setEditingCell(null); }}
+                                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setEditingCell(null); e.target.blur(); } }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Actions row */}
+                            <div className="mt-2.5 flex items-center gap-2">
+                                {curCat === "Reimbursement" ? (
+                                    <button onClick={() => openParentModal(tx.id)}
+                                        className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors ${(changes._parent_name || tx.parent?.merchant) ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 bg-gray-100 hover:bg-gray-200'}`}>
+                                        {changes._parent_name ?? tx.parent?.merchant ?? "Link parent"}
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button onClick={() => stageChange(tx.id, "self_amount", liveNet / 2)}
+                                            className="text-xs font-medium text-gray-400 hover:text-blue-500 transition-colors px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg">
+                                            Split 50/50
+                                        </button>
+                                        {totalReimb > 0 && <span className="text-xs text-blue-500 font-medium">Linked</span>}
+                                    </>
+                                )}
+                                <button onClick={() => handleDelete(tx.id)}
+                                    className="ml-auto text-gray-300 hover:text-rose-500 transition-colors p-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* ─── Desktop table (hidden below md) ─── */}
+            <div className="hidden md:block bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden">
                 <div className="overflow-x-auto overflow-y-auto max-h-[60vh]">
                     <table className="w-full text-sm text-left whitespace-nowrap">
                         <thead className="bg-gray-50 border-b border-gray-100 sticky top-0 z-10">
                             <tr>
-                                <th className="px-4 py-3 w-8">
+                                <th className="px-3 py-3 w-10">
                                     <input type="checkbox" checked={allSelected}
                                         ref={el => { if (el) el.indeterminate = someSelected; }}
                                         onChange={toggleSelectAll}
                                         className="h-3.5 w-3.5 cursor-pointer accent-blue-500" />
                                 </th>
-                                {["Date", "Merchant", "Type", "Category", "Total", "Self", "Partner", "Actions"].map(h => (
-                                    <th key={h} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
-                                ))}
+                                <th className="px-4 py-3 w-36 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
+                                <th className="px-4 py-3 min-w-[180px] text-xs font-semibold text-gray-500 uppercase tracking-wider">Merchant</th>
+                                <th className="px-4 py-3 w-28 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                                <th className="px-4 py-3 w-44 text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
+                                <th className="px-4 py-3 w-32 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total</th>
+                                <th className="px-4 py-3 w-32 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Self</th>
+                                <th className="px-4 py-3 w-32 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Partner</th>
+                                <th className="px-4 py-3 w-40 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-50">
-                            {transactions.map(tx => {
-                                const changes = pendingChanges[tx.id] || {};
-                                const curCat = changes.category ?? tx.category;
-                                const isSelected = selectedIds.has(tx.id);
-                                const isDirty = Object.keys(changes).length > 0;
-                                const originalRef = Math.abs(tx.original_amount ?? tx.amount ?? 0);
-                                const totalReimb = getReimbursementTotal(tx.id);
-
-                                const liveNet = curCat === "Reimbursement"
-                                    ? Math.abs(changes.amount !== undefined ? changes.amount : tx.amount)
-                                    : changes.amount !== undefined ? Math.abs(changes.amount) : Math.max(0, originalRef - totalReimb);
-
-                                let displaySelf = Math.abs(changes.self_amount !== undefined ? changes.self_amount : (tx.self_amount ?? 0));
-                                let displayPartner = Math.abs(changes.partner_amount !== undefined ? changes.partner_amount : (tx.partner_amount ?? 0));
-                                if (Math.abs(liveNet - (displaySelf + displayPartner)) > 0.01) { displaySelf = liveNet; displayPartner = 0; }
-
-                                const renderNumInput = (field, value, highlight = false) => (
-                                    <input
-                                        type="number"
-                                        value={editingCell?.id === tx.id && editingCell?.field === field ? editingCell.value : value.toFixed(2)}
-                                        className={`${inputCls} text-right font-mono w-20 ${highlight ? 'text-blue-500' : ''}`}
-                                        onFocus={() => setEditingCell({ id: tx.id, field, value: value.toString() })}
-                                        onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
-                                        onBlur={() => {
-                                            const n = parseFloat(editingCell?.value);
-                                            if (!isNaN(n)) stageChange(tx.id, field, n);
-                                            setEditingCell(null);
-                                        }}
-                                        onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); }}
-                                    />
-                                );
+                            {transactions.length === 0 && !loading ? (
+                                <tr>
+                                    <td colSpan={9} className="px-4 py-16 text-center text-sm text-gray-400">
+                                        No transactions found. Try adjusting your filters or{" "}
+                                        <button onClick={() => setShowInsertModal(true)} className="text-blue-500 hover:underline">add one manually</button>.
+                                    </td>
+                                </tr>
+                            ) : transactions.map(tx => {
+                                const { changes, curCat, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner } = deriveTx(tx);
 
                                 return (
-                                    <tr key={tx.id} className={`transition-colors ${isSelected ? 'bg-blue-50/60' : isDirty ? 'bg-amber-50/40' : 'hover:bg-gray-50/60'}`}>
+                                    <tr key={tx.id} className={`transition-colors ${isSelected ? 'bg-blue-50/60' : isDirty ? 'bg-slate-50/60' : 'hover:bg-gray-50/60'}`}>
                                         <td className="px-4 py-2.5">
                                             <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx.id)}
                                                 className="h-3.5 w-3.5 cursor-pointer accent-blue-500" />
@@ -378,7 +548,7 @@ export default function TransactionsPage() {
                                         </td>
                                         <td className="px-4 py-2.5">
                                             <div className="flex items-center gap-1.5">
-                                                {tx._isFlipped && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Partner's transaction" />}
+                                                {tx._isFlipped && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" title="Partner's transaction" />}
                                                 <input type="text" value={changes.merchant ?? tx.merchant} onChange={e => stageChange(tx.id, "merchant", e.target.value)} className={`${inputCls} font-medium`} />
                                             </div>
                                         </td>
@@ -394,22 +564,19 @@ export default function TransactionsPage() {
                                         </td>
                                         <td className="px-4 py-2.5 text-right">
                                             <div className="flex flex-col items-end">
-                                                {renderNumInput("amount", liveNet, totalReimb > 0)}
+                                                {renderNumInput(tx, "amount", liveNet, totalReimb > 0)}
                                                 {totalReimb > 0 && curCat !== "Reimbursement" && (
                                                     <span className="text-[10px] text-gray-400">Base ${originalRef.toFixed(2)}</span>
                                                 )}
                                             </div>
                                         </td>
-                                        <td className="px-4 py-2.5 text-right">{renderNumInput("self_amount", displaySelf)}</td>
-                                        <td className="px-4 py-2.5 text-right">{renderNumInput("partner_amount", displayPartner)}</td>
+                                        <td className="px-4 py-2.5 text-right">{renderNumInput(tx, "self_amount", displaySelf)}</td>
+                                        <td className="px-4 py-2.5 text-right">{renderNumInput(tx, "partner_amount", displayPartner)}</td>
                                         <td className="px-4 py-2.5">
                                             <div className="flex items-center gap-2">
                                                 {curCat === "Reimbursement" ? (
-                                                    <button onClick={async () => {
-                                                        setActiveChildId(tx.id); setShowParentModal(true);
-                                                        const { data } = await supabase.from("transactions").select("id, date, merchant, amount, original_amount").eq("type", "Expense").neq("id", tx.id).order("date", { ascending: false }).limit(20);
-                                                        setPotentialParents(data || []);
-                                                    }} className={`text-xs font-medium px-2 py-1 rounded-lg transition-colors ${(changes._parent_name || tx.parent?.merchant) ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 bg-gray-100 hover:bg-gray-200'}`}>
+                                                    <button onClick={() => openParentModal(tx.id)}
+                                                        className={`text-xs font-medium px-2 py-1 rounded-lg transition-colors ${(changes._parent_name || tx.parent?.merchant) ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 bg-gray-100 hover:bg-gray-200'}`}>
                                                         {changes._parent_name ?? tx.parent?.merchant ?? "Link parent"}
                                                     </button>
                                                 ) : (
@@ -422,7 +589,7 @@ export default function TransactionsPage() {
                                                     </>
                                                 )}
                                                 <button onClick={() => handleDelete(tx.id)}
-                                                    className="ml-auto text-gray-300 hover:text-red-500 transition-colors p-0.5">
+                                                    className="ml-auto text-gray-300 hover:text-rose-500 transition-colors p-0.5">
                                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                                                     </svg>
@@ -439,88 +606,84 @@ export default function TransactionsPage() {
 
             {/* Bulk action bar */}
             {selectedIds.size > 0 && (
-                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-white/10">
-                    <span className="text-sm font-medium text-gray-300">{selectedIds.size} selected</span>
-                    <div className="w-px h-4 bg-white/20" />
+                <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white px-4 sm:px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2 sm:gap-3 border border-white/10 max-w-[calc(100vw-2rem)] w-max">
+                    <span className="text-sm font-medium text-gray-300 shrink-0">{selectedIds.size} selected</span>
+                    <div className="w-px h-4 bg-white/20 shrink-0" />
                     <select value={bulkCategory} onChange={e => setBulkCategory(e.target.value)}
-                        className="bg-white/10 text-white text-sm rounded-lg px-3 py-1.5 outline-none border border-white/20 cursor-pointer">
-                        <option value="">Recategorize as…</option>
+                        className="bg-white/10 text-white text-sm rounded-lg px-2 sm:px-3 py-1.5 outline-none border border-white/20 cursor-pointer min-w-0">
+                        <option value="">Recategorize…</option>
                         {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <button onClick={handleBulkRecategorize} disabled={!bulkCategory}
-                        className="bg-blue-500 hover:bg-blue-400 disabled:opacity-40 text-white text-sm font-medium px-4 py-1.5 rounded-lg transition-colors">
+                        className="bg-blue-500 hover:bg-blue-400 disabled:opacity-40 text-white text-sm font-medium px-3 sm:px-4 py-1.5 rounded-lg transition-colors shrink-0">
                         Apply
                     </button>
-                    <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white text-sm transition-colors">Clear</button>
+                    <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white text-sm transition-colors shrink-0">Clear</button>
                 </div>
             )}
 
             {/* Insert modal */}
             {showInsertModal && (
-                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center shrink-0">
                             <h3 className="text-lg font-semibold text-gray-900">Add Transaction</h3>
-                            <button onClick={() => { setShowInsertModal(false); setInsertForm(emptyForm); }}
+                            <button onClick={() => { setShowInsertModal(false); setInsertForm(emptyForm); setInsertError(null); }}
                                 className="text-gray-400 hover:text-gray-600 transition-colors">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </button>
                         </div>
-                        <div className="p-6 space-y-4">
-                            {(() => {
-                                const ins = "w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none border border-transparent focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20 transition-all";
-                                return (
-                                    <>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Date</label>
-                                                <input type="date" value={insertForm.date} onChange={e => handleInsertField("date", e.target.value)} className={ins} />
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Merchant</label>
-                                                <input type="text" placeholder="e.g. Whole Foods" value={insertForm.merchant} onChange={e => handleInsertField("merchant", e.target.value)} className={ins} />
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Type</label>
-                                                <select value={insertForm.type} onChange={e => handleInsertField("type", e.target.value)} className={ins}>
-                                                    {TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Category</label>
-                                                <select value={insertForm.category} onChange={e => handleInsertField("category", e.target.value)} className={ins}>
-                                                    {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-3">
-                                            {[["Total", "amount", "0.00"], ["My share", "self_amount", "0.00"], ["Partner share", "partner_amount", "0.00"]].map(([label, field, ph]) => (
-                                                <div key={field}>
-                                                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
-                                                    <input type="number" placeholder={ph} min="0" step="0.01" value={insertForm[field]} onChange={e => handleInsertField(field, e.target.value)} className={ins} />
-                                                </div>
-                                            ))}
-                                        </div>
-                                        <div className="grid grid-cols-3 gap-3 items-end">
-                                            <div className="col-span-2">
-                                                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Notes (optional)</label>
-                                                <input type="text" placeholder="Description…" value={insertForm.description} onChange={e => handleInsertField("description", e.target.value)} className={ins} />
-                                            </div>
-                                            <div className="flex items-center gap-2 pb-1">
-                                                <input type="checkbox" id="ins-ex" checked={insertForm.exclude_from_report} onChange={e => handleInsertField("exclude_from_report", e.target.checked)} className="h-4 w-4 accent-blue-500 cursor-pointer" />
-                                                <label htmlFor="ins-ex" className="text-xs font-medium text-gray-500 cursor-pointer">Exclude from reports</label>
-                                            </div>
-                                        </div>
-                                    </>
-                                );
-                            })()}
+                        <div className="p-6 space-y-4 overflow-y-auto">
+                            {insertError && (
+                                <div className="bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 text-sm text-rose-600">{insertError}</div>
+                            )}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Date</label>
+                                    <input type="date" value={insertForm.date} onChange={e => handleInsertField("date", e.target.value)} className={modalInputCls} />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Merchant</label>
+                                    <input type="text" placeholder="e.g. Whole Foods" value={insertForm.merchant} onChange={e => handleInsertField("merchant", e.target.value)} className={modalInputCls} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Type</label>
+                                    <select value={insertForm.type} onChange={e => handleInsertField("type", e.target.value)} className={modalInputCls}>
+                                        {TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Category</label>
+                                    <select value={insertForm.category} onChange={e => handleInsertField("category", e.target.value)} className={modalInputCls}>
+                                        {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                {[["Total", "amount", "0.00"], ["My share", "self_amount", "0.00"], ["Partner share", "partner_amount", "0.00"]].map(([label, field, ph]) => (
+                                    <div key={field}>
+                                        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">{label}</label>
+                                        <input type="number" placeholder={ph} min="0" step="0.01" value={insertForm[field]} onChange={e => handleInsertField(field, e.target.value)} className={modalInputCls} />
+                                    </div>
+                                ))}
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                                <div className="sm:col-span-2">
+                                    <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Notes (optional)</label>
+                                    <input type="text" placeholder="Description…" value={insertForm.description} onChange={e => handleInsertField("description", e.target.value)} className={modalInputCls} />
+                                </div>
+                                <div className="flex items-center gap-2 pb-1">
+                                    <input type="checkbox" id="ins-ex" checked={insertForm.exclude_from_report} onChange={e => handleInsertField("exclude_from_report", e.target.checked)} className="h-4 w-4 accent-blue-500 cursor-pointer" />
+                                    <label htmlFor="ins-ex" className="text-xs font-medium text-gray-500 cursor-pointer">Exclude from reports</label>
+                                </div>
+                            </div>
                         </div>
-                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
-                            <button onClick={() => { setShowInsertModal(false); setInsertForm(emptyForm); }}
+                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3 shrink-0">
+                            <button onClick={() => { setShowInsertModal(false); setInsertForm(emptyForm); setInsertError(null); }}
                                 className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2 transition-colors">
                                 Cancel
                             </button>
@@ -535,20 +698,23 @@ export default function TransactionsPage() {
 
             {/* Review modal */}
             {showReviewModal && (
-                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-end sm:items-center justify-center z-[100] p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center shrink-0">
                             <h3 className="text-lg font-semibold text-gray-900">Review Changes</h3>
                             <span className="text-xs text-gray-400 font-medium">Total = Self + Partner</span>
                         </div>
-                        <div className="p-6 max-h-96 overflow-y-auto space-y-3">
+                        <div className="p-6 overflow-y-auto space-y-3">
+                            {saveError && (
+                                <div className="bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 text-sm text-rose-600">{saveError}</div>
+                            )}
                             {Object.entries(pendingChanges).map(([id, updates]) => {
                                 const tx = transactions.find(t => t.id === id);
                                 const isReimb = (updates.category ?? tx?.category) === "Reimbursement";
                                 const base = updates.original_amount ?? tx?.original_amount ?? tx?.amount;
                                 const net = isReimb ? (updates.amount ?? tx.amount) : Math.max(0, base - getReimbursementTotal(id));
-                                let dSelf = updates.self_amount ?? tx?.self_amount;
-                                let dPartner = updates.partner_amount ?? tx?.partner_amount;
+                                let dSelf = updates.self_amount ?? tx?.self_amount ?? 0;
+                                let dPartner = updates.partner_amount ?? tx?.partner_amount ?? 0;
                                 if (Math.abs(net - (dSelf + dPartner)) > 0.01) { dSelf = net; dPartner = 0; }
 
                                 return (
@@ -556,15 +722,15 @@ export default function TransactionsPage() {
                                         <p className="font-semibold text-blue-500 mb-2">{tx?.merchant}</p>
                                         <div className="grid grid-cols-3 gap-2 text-center text-xs mb-2 bg-white p-2 rounded-lg border border-gray-100">
                                             <div className="text-gray-500">Net <span className="font-semibold text-gray-900">${net.toFixed(2)}</span></div>
-                                            <div className="text-gray-500">Self <span className="font-semibold text-blue-500">${dSelf.toFixed(2)}</span></div>
-                                            <div className="text-gray-500">Partner <span className="font-semibold text-emerald-500">${dPartner.toFixed(2)}</span></div>
+                                            <div className="text-gray-500">Self <span className="font-semibold text-indigo-500">${dSelf.toFixed(2)}</span></div>
+                                            <div className="text-gray-500">Partner <span className="font-semibold text-teal-500">${dPartner.toFixed(2)}</span></div>
                                         </div>
                                         <div className="space-y-1">
                                             {Object.entries(updates).map(([f, v]) =>
                                                 !f.startsWith('_') && !["amount","self_amount","partner_amount"].includes(f) && (
                                                     <div key={f} className="flex justify-between text-xs py-0.5 border-t border-gray-100">
                                                         <span className="text-gray-400 capitalize">{f.replace('_', ' ')}</span>
-                                                        <span className="font-medium text-emerald-600">{String(v)}</span>
+                                                        <span className="font-medium text-green-600">{String(v)}</span>
                                                     </div>
                                                 )
                                             )}
@@ -573,9 +739,9 @@ export default function TransactionsPage() {
                                 );
                             })}
                         </div>
-                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3">
+                        <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex justify-end gap-3 shrink-0">
                             <button onClick={() => setShowReviewModal(false)} className="text-sm font-medium text-gray-500 hover:text-gray-900 px-4 py-2 transition-colors">Back</button>
-                            <button onClick={handleConfirmSave} className="bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-6 py-2 rounded-full transition-colors">Confirm & save</button>
+                            <button onClick={handleConfirmSave} className="bg-green-500 hover:bg-green-600 text-white text-sm font-medium px-6 py-2 rounded-full transition-colors">Confirm & save</button>
                         </div>
                     </div>
                 </div>
@@ -583,11 +749,19 @@ export default function TransactionsPage() {
 
             {/* Parent modal */}
             {showParentModal && (
-                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[110] p-4">
-                    <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-4">Link to expense</h3>
-                        <div className="space-y-2 max-h-64 overflow-y-auto">
-                            {potentialParents.map(p => (
+                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-end sm:items-center justify-center z-[110] p-0 sm:p-4">
+                    <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md shadow-2xl max-h-[80vh] flex flex-col">
+                        <div className="px-6 py-4 border-b border-gray-100 shrink-0">
+                            <h3 className="text-lg font-semibold text-gray-900">Link to expense</h3>
+                        </div>
+                        <div className="p-4 space-y-2 overflow-y-auto">
+                            {parentsLoading ? (
+                                <div className="flex justify-center py-8">
+                                    <div className="w-5 h-5 border-2 border-gray-200 border-t-gray-500 rounded-full animate-spin" />
+                                </div>
+                            ) : potentialParents.length === 0 ? (
+                                <p className="text-center py-8 text-sm text-gray-400">No expenses found.</p>
+                            ) : potentialParents.map(p => (
                                 <button key={p.id} onClick={() => {
                                     stageChange(activeChildId, "parent_id", p.id);
                                     stageChange(activeChildId, "_parent_name", p.merchant);
@@ -597,11 +771,13 @@ export default function TransactionsPage() {
                                         <p className="font-medium text-gray-800 group-hover:text-blue-500 transition-colors">{p.merchant}</p>
                                         <p className="text-xs text-gray-400 mt-0.5">{p.date}</p>
                                     </div>
-                                    <span className="font-semibold text-red-500 text-sm">${Math.abs(p.original_amount ?? p.amount).toFixed(2)}</span>
+                                    <span className="font-semibold text-rose-500 text-sm">${Math.abs(p.original_amount ?? p.amount).toFixed(2)}</span>
                                 </button>
                             ))}
                         </div>
-                        <button onClick={() => setShowParentModal(false)} className="mt-4 w-full py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-medium text-gray-600 transition-colors">Close</button>
+                        <div className="p-4 border-t border-gray-100 shrink-0">
+                            <button onClick={() => setShowParentModal(false)} className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-medium text-gray-600 transition-colors">Close</button>
+                        </div>
                     </div>
                 </div>
             )}

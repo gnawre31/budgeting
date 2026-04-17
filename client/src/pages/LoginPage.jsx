@@ -5,12 +5,17 @@ export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
 
     const handleLogin = async (e) => {
         e.preventDefault();
         setLoading(true);
+        setError(null);
         const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) alert(error.message);
+        if (error) {
+            setError(error.message);
+            setPassword("");
+        }
         setLoading(false);
     };
 
@@ -23,6 +28,11 @@ export default function LoginPage() {
                 </div>
 
                 <form onSubmit={handleLogin} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-8 space-y-4">
+                    {error && (
+                        <div className="bg-rose-50 border border-rose-100 rounded-xl px-4 py-3 text-sm text-rose-600">
+                            {error}
+                        </div>
+                    )}
                     <div className="space-y-3">
                         <input
                             type="email"

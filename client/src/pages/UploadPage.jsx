@@ -315,7 +315,7 @@ export default function UploadPage() {
                                                 <span className={tx.type === "Income" ? "text-green-600" : "text-red-500"}>{tx.type}</span>
                                             </td>
                                             <td className="px-4 py-3 text-center">
-                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
+                                                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-600">
                                                     {tx.dupeCount}x
                                                 </span>
                                             </td>

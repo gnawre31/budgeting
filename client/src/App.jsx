@@ -34,7 +34,9 @@ export default function App() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogout = () => supabase.auth.signOut();
+  const handleLogout = async () => {
+    try { await supabase.auth.signOut(); } catch (err) { console.error("Logout failed:", err); }
+  };
 
   if (authLoading) {
     return (

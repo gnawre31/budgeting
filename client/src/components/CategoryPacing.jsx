@@ -97,7 +97,7 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
             setLoading(false);
         };
         fetchData();
-    }, [selectedMonth, budgets, prevMonth]);
+    }, [selectedMonth, budgets]);
 
     const saveBudget = (category) => {
         let val = Number(editValue) || 0;
@@ -143,14 +143,14 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                         {viewMode === 'self' ? 'My Cash Flow' : 'Cash Flow'}
                     </p>
                     <div className="flex items-baseline gap-2 mb-4">
-                        <span className={`text-3xl font-semibold tracking-tight ${isNegativeNet ? 'text-red-500' : 'text-emerald-500'}`}>
+                        <span className={`text-3xl font-semibold tracking-tight ${isNegativeNet ? 'text-rose-500' : 'text-green-500'}`}>
                             {isNegativeNet ? '−' : '+'}{fmt(Math.abs(netCash))}
                         </span>
                         <span className="text-sm text-gray-400">{isNegativeNet ? 'net loss' : 'net saved'}</span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                            className={`h-full rounded-full transition-all duration-700 ${isNegativeNet ? 'bg-red-400' : 'bg-emerald-400'}`}
+                            className={`h-full rounded-full transition-all duration-700 ${isNegativeNet ? 'bg-rose-400' : 'bg-green-400'}`}
                             style={{ width: `${cashFill}%` }}
                         />
                     </div>
@@ -164,14 +164,14 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                 <div className="bg-white px-6 py-5">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Budget Health</p>
                     <div className="flex items-baseline gap-2 mb-4">
-                        <span className={`text-3xl font-semibold tracking-tight ${isOverBudget ? 'text-red-500' : 'text-blue-500'}`}>
+                        <span className={`text-3xl font-semibold tracking-tight ${isOverBudget ? 'text-rose-500' : 'text-indigo-500'}`}>
                             {isOverBudget ? '−' : '+'}{fmt(Math.abs(budgetDelta))}
                         </span>
                         <span className="text-sm text-gray-400">{isOverBudget ? 'over budget' : 'remaining'}</span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div
-                            className={`h-full rounded-full transition-all duration-700 ${isOverBudget ? 'bg-red-400' : 'bg-blue-400'}`}
+                            className={`h-full rounded-full transition-all duration-700 ${isOverBudget ? 'bg-rose-400' : 'bg-indigo-400'}`}
                             style={{ width: `${budgetFill}%` }}
                         />
                     </div>
@@ -187,9 +187,9 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                 <div className="flex items-center justify-between mb-5">
                     <h3 className="text-sm font-semibold text-gray-900">Categories</h3>
                     <div className="flex items-center gap-3 text-xs text-gray-400">
-                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />Me</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-indigo-400 inline-block" />Me</span>
                         {viewMode === "household" && (
-                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />Partner</span>
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-teal-400 inline-block" />Partner</span>
                         )}
                     </div>
                 </div>
@@ -220,13 +220,13 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                             const projectedOver = projected !== null && hasBudget && projected > activeBudget;
 
                             return (
-                                <div key={cat.category} className="group">
+                                <div key={cat.category} className="group relative">
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-medium text-gray-800">{cat.category}</span>
                                             {prevSpend > 0 && (
                                                 <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${
-                                                    delta > 0 ? 'bg-red-50 text-red-500' : 'bg-emerald-50 text-emerald-600'
+                                                    delta > 0 ? 'bg-rose-50 text-rose-500' : 'bg-green-50 text-green-600'
                                                 }`}>
                                                     {delta > 0 ? '↑' : '↓'}{fmt(Math.abs(delta))}
                                                 </span>
@@ -234,7 +234,7 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                                         </div>
 
                                         <div className="flex items-center gap-1.5 text-sm">
-                                            <span className={`font-semibold ${isOver ? 'text-red-500' : 'text-gray-800'}`}>
+                                            <span className={`font-semibold ${isOver ? 'text-rose-500' : 'text-gray-800'}`}>
                                                 {fmt(catSpent)}
                                             </span>
                                             <span className="text-gray-300">/</span>
@@ -244,7 +244,7 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                                                     <input
                                                         autoFocus
                                                         type="number"
-                                                        className="w-16 text-sm font-medium text-blue-500 bg-blue-50 rounded-lg px-1.5 py-0.5 outline-none border border-blue-200"
+                                                        className="w-16 text-sm font-medium text-indigo-500 bg-indigo-50 rounded-lg px-1.5 py-0.5 outline-none border border-indigo-200"
                                                         value={editValue}
                                                         onChange={(e) => setEditValue(e.target.value)}
                                                         onBlur={() => saveBudget(cat.category)}
@@ -254,7 +254,7 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                                             ) : (
                                                 <button
                                                     onClick={() => { setEditingCategory(cat.category); setEditValue(activeBudget); }}
-                                                    className="text-gray-400 hover:text-blue-500 transition-colors text-sm group-hover:underline decoration-dashed underline-offset-2"
+                                                    className="text-gray-400 hover:text-indigo-500 transition-colors text-sm group-hover:underline decoration-dashed underline-offset-2"
                                                     title="Edit budget"
                                                 >
                                                     {fmt(activeBudget)}
@@ -268,18 +268,18 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                                         {hasBudget ? (
                                             <>
                                                 <div
-                                                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-red-400' : 'bg-blue-400'}`}
+                                                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-rose-400' : 'bg-indigo-400'}`}
                                                     style={{ width: `${selfPct}%` }}
                                                 />
                                                 {viewMode === "household" && (
                                                     <div
-                                                        className={`absolute top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-red-300' : 'bg-emerald-400'}`}
+                                                        className={`absolute top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-rose-300' : 'bg-teal-400'}`}
                                                         style={{ left: `${selfPct}%`, width: `${partnerPct}%` }}
                                                     />
                                                 )}
                                             </>
                                         ) : (
-                                            <div className="h-full w-full bg-amber-200 rounded-full" />
+                                            <div className="h-full w-full bg-slate-300 rounded-full" />
                                         )}
                                     </div>
 
@@ -294,8 +294,8 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                                     {/* Sub-labels */}
                                     <div className="flex justify-between mt-1.5">
                                         <span className={`text-xs ${
-                                            !hasBudget && catSpent > 0 ? 'text-amber-500 font-medium' :
-                                            isOver ? 'text-red-500 font-medium' :
+                                            !hasBudget && catSpent > 0 ? 'text-slate-500 font-medium' :
+                                            isOver ? 'text-rose-500 font-medium' :
                                             hasBudget ? 'text-gray-400' : ''
                                         }`}>
                                             {!hasBudget && catSpent > 0 ? 'Unbudgeted' :
@@ -303,7 +303,7 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                                              hasBudget ? `${fmt(activeBudget - catSpent)} left` : ''}
                                         </span>
                                         {projected !== null && hasBudget && (
-                                            <span className={`text-xs font-medium ${projectedOver ? 'text-orange-500' : 'text-gray-400'}`}>
+                                            <span className={`text-xs font-medium ${projectedOver ? 'text-rose-400' : 'text-gray-400'}`}>
                                                 ~{fmt(projected)} projected{projectedOver ? ' ⚠' : ''}
                                             </span>
                                         )}

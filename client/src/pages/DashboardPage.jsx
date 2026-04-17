@@ -20,8 +20,17 @@ export default function DashboardPage() {
     const handleNextMonth = () => {
         const [year, month] = selectedMonth.split('-');
         const d = new Date(parseInt(year), parseInt(month), 1);
-        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        if (next <= currentMonth) setSelectedMonth(next);
     };
+
+    const isCurrentMonth = (() => {
+        const now = new Date();
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        return selectedMonth >= currentMonth;
+    })();
 
     const displayMonthName = useMemo(() => {
         const [year, month] = selectedMonth.split('-');
@@ -76,7 +85,8 @@ export default function DashboardPage() {
                         <span className="text-sm font-medium text-gray-700 w-28 text-center">{displayMonthName}</span>
                         <button
                             onClick={handleNextMonth}
-                            className="p-1.5 hover:bg-white rounded-lg transition-all text-gray-500 hover:text-gray-900 hover:shadow-sm"
+                            disabled={isCurrentMonth}
+                            className="p-1.5 hover:bg-white rounded-lg transition-all text-gray-500 hover:text-gray-900 hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:shadow-none"
                         >
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -90,8 +100,8 @@ export default function DashboardPage() {
             <div className="space-y-4">
                 <CategoryPacing selectedMonth={selectedMonth} viewMode={viewMode} />
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                    <div className="lg:col-span-2">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+                    <div className="lg:col-span-2 h-full">
                         <SavingsTrend selectedMonth={selectedMonth} viewMode={viewMode} />
                     </div>
                     <ReimbursementBalance />
