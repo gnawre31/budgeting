@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Category Budget UX Options</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #f3f4f6; font-family: system-ui, sans-serif; }
+    .scrollable { overflow-y: auto; }
+    .scrollable::-webkit-scrollbar { width: 4px; }
+    .scrollable::-webkit-scrollbar-track { background: #f3f4f6; border-radius: 9999px; }
+    .scrollable::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 9999px; }
+  </style>
+</head>
+<body class="p-8">
+
+  <h1 class="text-2xl font-bold text-gray-800 mb-2">Category Budget UX — 4 Options</h1>
+  <p class="text-sm text-gray-500 mb-8">Same mock data (12 categories) across all options</p>
+
+  <div class="grid grid-cols-2 gap-6">
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- OPTION A: Compact list + Show more        -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Option A</p>
+          <h2 class="text-base font-semibold text-gray-900">Compact List + Show More</h2>
+        </div>
+      </div>
+
+      <div class="px-5 py-4 space-y-3" id="optA-list">
+        <!-- shown rows -->
+      </div>
+
+      <div id="optA-more" class="px-5 pb-4 hidden">
+        <div class="space-y-3" id="optA-extra"></div>
+      </div>
+
+      <button onclick="toggleA()" id="optA-btn"
+        class="w-full py-3 border-t border-gray-100 text-xs font-medium text-indigo-500 hover:bg-indigo-50 transition-colors">
+        + 6 more categories
+      </button>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- OPTION B: 2-column compact grid           -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Option B</p>
+        <h2 class="text-base font-semibold text-gray-900">2-Column Compact Grid</h2>
+      </div>
+      <div class="p-4 grid grid-cols-2 gap-3" id="optB-grid"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- OPTION C: Grouped by status               -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Option C</p>
+        <h2 class="text-base font-semibold text-gray-900">Grouped by Status</h2>
+      </div>
+      <div class="divide-y divide-gray-100" id="optC-groups"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════════ -->
+    <!-- OPTION D: Search + filter tabs + scroll   -->
+    <!-- ══════════════════════════════════════════ -->
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100">
+        <p class="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Option D</p>
+        <h2 class="text-base font-semibold text-gray-900">Search + Filter Tabs</h2>
+      </div>
+      <!-- Search + tabs -->
+      <div class="px-4 pt-3 pb-2 flex items-center gap-2">
+        <div class="flex-1 relative">
+          <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input id="optD-search" oninput="filterD()" placeholder="Search categories…"
+            class="w-full pl-8 pr-3 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-indigo-300" />
+        </div>
+        <div class="flex bg-gray-100 p-0.5 rounded-xl text-xs">
+          <button onclick="setTabD('all')" id="tab-all" class="px-3 py-1 rounded-[10px] font-medium bg-white shadow-sm text-gray-900">All</button>
+          <button onclick="setTabD('budgeted')" id="tab-budgeted" class="px-3 py-1 rounded-[10px] font-medium text-gray-500">Budgeted</button>
+          <button onclick="setTabD('over')" id="tab-over" class="px-3 py-1 rounded-[10px] font-medium text-gray-500">Over</button>
+        </div>
+      </div>
+      <div class="scrollable max-h-[420px] px-4 pb-4 space-y-3" id="optD-list"></div>
+    </div>
+
+  </div><!-- end grid -->
+
+<script>
+const cats = [
+  { name: "Groceries",        spent: 620,  budget: 800,  self: 370, partner: 250 },
+  { name: "Dining Out",       spent: 510,  budget: 400,  self: 280, partner: 230 },
+  { name: "Rent",             spent: 2200, budget: 2200, self: 1100, partner: 1100 },
+  { name: "Utilities",        spent: 180,  budget: 250,  self: 90,  partner: 90 },
+  { name: "Transport",        spent: 340,  budget: 300,  self: 200, partner: 140 },
+  { name: "Entertainment",    spent: 95,   budget: 200,  self: 60,  partner: 35 },
+  { name: "Health",           spent: 230,  budget: 150,  self: 230, partner: 0 },
+  { name: "Subscriptions",    spent: 48,   budget: 0,    self: 48,  partner: 0 },
+  { name: "Clothing",         spent: 310,  budget: 0,    self: 210, partner: 100 },
+  { name: "Travel",           spent: 0,    budget: 500,  self: 0,   partner: 0 },
+  { name: "Home & Garden",    spent: 75,   budget: 0,    self: 75,  partner: 0 },
+  { name: "Pet Care",         spent: 120,  budget: 0,    self: 120, partner: 0 },
+];
+
+const fmt = (n) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : `$${n}`;
+
+function status(c) {
+  if (!c.budget) return 'unbudgeted';
+  const pct = c.spent / c.budget;
+  if (pct > 1) return 'over';
+  if (pct > 0.75) return 'atrisk';
+  return 'ok';
+}
+
+function barColor(c) {
+  const s = status(c);
+  if (s === 'over') return 'bg-rose-400';
+  if (s === 'atrisk') return 'bg-amber-400';
+  return 'bg-indigo-400';
+}
+
+function statusBadge(c) {
+  const s = status(c);
+  if (s === 'over') return `<span class="text-[10px] font-semibold text-rose-500 bg-rose-50 px-1.5 py-0.5 rounded-md">Over</span>`;
+  if (s === 'atrisk') return `<span class="text-[10px] font-semibold text-amber-500 bg-amber-50 px-1.5 py-0.5 rounded-md">At risk</span>`;
+  if (s === 'unbudgeted') return `<span class="text-[10px] font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md">No budget</span>`;
+  return '';
+}
+
+// ── Option A rows ─────────────────────────────────────────────
+function makeRowA(c) {
+  const pct = c.budget ? Math.min((c.spent / c.budget) * 100, 100) : 100;
+  const selfPct = c.budget ? Math.min((c.self / c.budget) * 100, 100) : 100;
+  const partPct = c.budget ? Math.min((c.partner / c.budget) * 100, 100 - selfPct) : 0;
+  const isOver = c.budget && c.spent > c.budget;
+  const col = barColor(c);
+  return `
+    <div>
+      <div class="flex items-center justify-between mb-1">
+        <div class="flex items-center gap-1.5">
+          <span class="text-sm font-medium text-gray-800">${c.name}</span>
+          ${statusBadge(c)}
+        </div>
+        <span class="text-sm font-semibold ${isOver ? 'text-rose-500' : 'text-gray-700'}">${fmt(c.spent)}${c.budget ? ` <span class="text-gray-300 font-normal">/</span> <span class="text-gray-400 text-xs font-normal">${fmt(c.budget)}</span>` : ''}</span>
+      </div>
+      <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden relative">
+        <div class="absolute left-0 top-0 h-full rounded-full ${col}" style="width:${selfPct}%"></div>
+        <div class="absolute top-0 h-full rounded-full bg-teal-400" style="left:${selfPct}%;width:${partPct}%"></div>
+      </div>
+    </div>`;
+}
+
+const listEl = document.getElementById('optA-list');
+const extraEl = document.getElementById('optA-extra');
+cats.slice(0, 6).forEach(c => listEl.insertAdjacentHTML('beforeend', makeRowA(c)));
+cats.slice(6).forEach(c => extraEl.insertAdjacentHTML('beforeend', makeRowA(c)));
+
+let optAOpen = false;
+function toggleA() {
+  optAOpen = !optAOpen;
+  document.getElementById('optA-more').classList.toggle('hidden', !optAOpen);
+  document.getElementById('optA-btn').textContent = optAOpen ? 'Show less ↑' : '+ 6 more categories';
+}
+
+// ── Option B grid ─────────────────────────────────────────────
+const gridEl = document.getElementById('optB-grid');
+cats.forEach(c => {
+  const pct = c.budget ? Math.min((c.spent / c.budget) * 100, 100) : 100;
+  const selfPct = c.budget ? Math.min((c.self / c.budget) * 100, 100) : 100;
+  const partPct = c.budget ? Math.min((c.partner / c.budget) * 100, 100 - selfPct) : 0;
+  const col = barColor(c);
+  const isOver = c.budget && c.spent > c.budget;
+  gridEl.insertAdjacentHTML('beforeend', `
+    <div class="bg-gray-50 rounded-xl p-3">
+      <div class="flex items-start justify-between mb-2">
+        <span class="text-xs font-semibold text-gray-700 leading-tight">${c.name}</span>
+        ${statusBadge(c)}
+      </div>
+      <div class="flex items-baseline gap-1 mb-2">
+        <span class="text-base font-bold ${isOver ? 'text-rose-500' : 'text-gray-800'}">${fmt(c.spent)}</span>
+        ${c.budget ? `<span class="text-xs text-gray-400">/ ${fmt(c.budget)}</span>` : '<span class="text-xs text-gray-400">unbudgeted</span>'}
+      </div>
+      <div class="h-1 bg-gray-200 rounded-full overflow-hidden">
+        <div class="h-full ${col} rounded-full" style="width:${selfPct}%"></div>
+      </div>
+    </div>`);
+});
+
+// ── Option C grouped ─────────────────────────────────────────
+const groups = [
+  { key: 'over',       label: '🔴 Over Budget',  color: 'text-rose-600',  bg: 'bg-rose-50' },
+  { key: 'atrisk',     label: '🟡 At Risk',       color: 'text-amber-600', bg: 'bg-amber-50' },
+  { key: 'ok',         label: '🟢 On Track',      color: 'text-green-700', bg: 'bg-green-50' },
+  { key: 'unbudgeted', label: '⬜ Unbudgeted',    color: 'text-gray-500',  bg: 'bg-gray-50' },
+];
+const groupsEl = document.getElementById('optC-groups');
+const openGroups = new Set(['over', 'atrisk', 'ok']);
+
+groups.forEach(g => {
+  const members = cats.filter(c => status(c) === g.key);
+  if (!members.length) return;
+  const id = `grp-${g.key}`;
+  groupsEl.insertAdjacentHTML('beforeend', `
+    <div>
+      <button onclick="toggleGroup('${g.key}')"
+        class="w-full flex items-center justify-between px-5 py-3 hover:bg-gray-50 transition-colors">
+        <span class="text-xs font-bold uppercase tracking-wider ${g.color}">${g.label} <span class="ml-1 font-normal normal-case text-gray-400">${members.length} categories</span></span>
+        <svg id="arrow-${g.key}" class="w-3.5 h-3.5 text-gray-400 transition-transform ${openGroups.has(g.key) ? '' : '-rotate-90'}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div id="${id}" class="px-5 pb-4 space-y-3 ${openGroups.has(g.key) ? '' : 'hidden'}">
+        ${members.map(c => {
+          const selfPct = c.budget ? Math.min((c.self / c.budget) * 100, 100) : 100;
+          const partPct = c.budget ? Math.min((c.partner / c.budget) * 100, 100 - selfPct) : 0;
+          const col = barColor(c);
+          const isOver = c.budget && c.spent > c.budget;
+          return `
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-sm font-medium text-gray-800">${c.name}</span>
+              <span class="text-sm font-semibold ${isOver ? 'text-rose-500' : 'text-gray-700'}">${fmt(c.spent)}${c.budget ? ` <span class="text-gray-300">/</span> <span class="text-xs text-gray-400 font-normal">${fmt(c.budget)}</span>` : ''}</span>
+            </div>
+            <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div class="h-full ${col} rounded-full relative" style="width:${Math.min(selfPct+partPct,100)}%">
+                <div class="absolute right-0 top-0 h-full bg-teal-400 rounded-full" style="width:${partPct ? (partPct/(selfPct+partPct)*100) : 0}%"></div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`);
+});
+
+function toggleGroup(key) {
+  const el = document.getElementById(`grp-${key}`);
+  const arrow = document.getElementById(`arrow-${key}`);
+  const hidden = el.classList.toggle('hidden');
+  arrow.classList.toggle('-rotate-90', hidden);
+}
+
+// ── Option D search + tabs ────────────────────────────────────
+let activeTab = 'all';
+function renderD() {
+  const q = document.getElementById('optD-search').value.toLowerCase();
+  const el = document.getElementById('optD-list');
+  el.innerHTML = '';
+  cats
+    .filter(c => {
+      if (q && !c.name.toLowerCase().includes(q)) return false;
+      if (activeTab === 'budgeted') return c.budget > 0;
+      if (activeTab === 'over') return c.budget && c.spent > c.budget;
+      return true;
+    })
+    .forEach(c => {
+      const selfPct = c.budget ? Math.min((c.self / c.budget) * 100, 100) : 100;
+      const partPct = c.budget ? Math.min((c.partner / c.budget) * 100, 100 - selfPct) : 0;
+      const col = barColor(c);
+      const isOver = c.budget && c.spent > c.budget;
+      el.insertAdjacentHTML('beforeend', `
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm font-medium text-gray-800">${c.name}</span>
+              ${statusBadge(c)}
+            </div>
+            <span class="text-sm font-semibold ${isOver ? 'text-rose-500' : 'text-gray-700'}">${fmt(c.spent)}${c.budget ? ` <span class="text-gray-300">/</span> <span class="text-xs text-gray-400 font-normal">${fmt(c.budget)}</span>` : ''}</span>
+          </div>
+          <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+            <div class="absolute left-0 top-0 h-full rounded-full ${col} relative" style="width:${selfPct+partPct}%">
+              <div class="absolute right-0 top-0 h-full bg-teal-400 rounded-full" style="width:${partPct ? (partPct/(selfPct+partPct)*100) : 0}%"></div>
+            </div>
+          </div>
+        </div>`);
+    });
+  if (!el.children.length) el.innerHTML = '<p class="text-sm text-gray-400 text-center py-6">No categories match</p>';
+}
+
+function filterD() { renderD(); }
+function setTabD(tab) {
+  activeTab = tab;
+  ['all','budgeted','over'].forEach(t => {
+    const btn = document.getElementById(`tab-${t}`);
+    if (t === tab) btn.className = 'px-3 py-1 rounded-[10px] font-medium bg-white shadow-sm text-gray-900';
+    else btn.className = 'px-3 py-1 rounded-[10px] font-medium text-gray-500';
+  });
+  renderD();
+}
+renderD();
+</script>
+</body>
+</html>

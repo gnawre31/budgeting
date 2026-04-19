@@ -1,52 +1,58 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-export default function TopMerchants({ selectedMonth, viewMode }) {
-    const [merchantMap, setMerchantMap] = useState({});
+export default function TopMerchants({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [] }) {
+    const [fetchedRows, setFetchedRows]   = useState([]);
+    const [currentUserId, setCurrentUserId] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) { setLoading(false); return; }
 
             const [year, month] = selectedMonth.split('-');
             const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
 
-            const { data } = await supabase
+            const { data, error } = await supabase
                 .from("transactions")
-                .select("merchant_normalized, merchant, amount, self_amount, partner_amount, user_id")
+                .select("merchant_normalized, merchant, amount, self_amount, partner_amount, user_id, category")
                 .eq("type", "Expense")
                 .eq("exclude_from_report", false)
-                .neq("category", "Reimbursement")
                 .is("parent_id", null)
                 .gte("date", `${selectedMonth}-01`)
                 .lte("date", `${selectedMonth}-${String(lastDay).padStart(2, '0')}`)
                 .or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`);
 
-            if (!data) { setLoading(false); return; }
+            if (error) { console.error("TopMerchants fetch error:", error); setLoading(false); return; }
 
-            const map = {};
-            data.forEach(tx => {
-                const key = tx.merchant_normalized || tx.merchant || "Unknown";
-                if (!map[key]) map[key] = { name: key, total: 0, self: 0 };
-                map[key].total += tx.amount || 0;
-                map[key].self += tx.user_id === user.id ? (tx.self_amount || 0) : (tx.partner_amount || 0);
-            });
-
-            setMerchantMap(map);
+            setCurrentUserId(user.id);
+            setFetchedRows(data || []);
             setLoading(false);
         };
         fetchData();
     }, [selectedMonth]);
 
-    const merchants = useMemo(() =>
-        Object.values(merchantMap)
+    const merchants = useMemo(() => {
+        const filtered = fetchedRows
+            .filter(tx => !alwaysExcludedCategories.includes(tx.category))
+            .filter(tx => !excludeSpecial || !specialCategories.includes(tx.category));
+
+        const map = {};
+        filtered.forEach(tx => {
+            const key = tx.merchant_normalized || tx.merchant || "Unknown";
+            if (!map[key]) map[key] = { name: key, total: 0, self: 0 };
+            map[key].total += tx.amount || 0;
+            map[key].self  += tx.user_id === currentUserId
+                ? (tx.self_amount || 0)
+                : (tx.partner_amount || 0);
+        });
+
+        return Object.values(map)
             .sort((a, b) => viewMode === "household" ? b.total - a.total : b.self - a.self)
-            .slice(0, 8),
-        [merchantMap, viewMode]
-    );
+            .slice(0, 8);
+    }, [fetchedRows, currentUserId, viewMode, excludeSpecial, specialCategories, alwaysExcludedCategories]);
 
     const maxAmount = merchants.length > 0
         ? (viewMode === "household" ? merchants[0].total : merchants[0].self) : 1;

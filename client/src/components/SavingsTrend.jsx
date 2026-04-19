@@ -9,8 +9,12 @@ function getLast6Months(endMonth) {
     });
 }
 
-export default function SavingsTrend({ selectedMonth, viewMode }) {
-    const [rawData, setRawData] = useState([]);
+export default function SavingsTrend({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [] }) {
+    const [fetchedMonths, setFetchedMonths]     = useState([]);
+    const [fetchedExpenses, setFetchedExpenses] = useState([]);
+    const [fetchedIncome, setFetchedIncome]     = useState([]);
+    const [spanYears, setSpanYears]             = useState(false);
+    const [currentUserId, setCurrentUserId]     = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -27,12 +31,12 @@ export default function SavingsTrend({ selectedMonth, viewMode }) {
 
             const [{ data: expenses }, { data: income }] = await Promise.all([
                 supabase.from("monthly_category_spend")
-                    .select("month, total_spent, self_spent")
+                    .select("month, total_spent, self_spent, category")
                     .eq("user_id", user.id)
                     .gte("month", first)
                     .lte("month", last),
                 supabase.from("transactions")
-                    .select("date, amount, self_amount, partner_amount, user_id")
+                    .select("date, amount, self_amount, partner_amount, user_id, category")
                     .eq("type", "Income")
                     .eq("exclude_from_report", false)
                     .is("parent_id", null)
@@ -42,34 +46,48 @@ export default function SavingsTrend({ selectedMonth, viewMode }) {
             ]);
 
             const years = new Set(months.map(m => m.split('-')[0]));
-            const spanYears = years.size > 1;
-
-            const result = months.map(m => {
-                const monthExp = expenses?.filter(d => d.month === m) || [];
-                const totalExpense = monthExp.reduce((s, d) => s + (d.total_spent || 0), 0);
-                const selfExpense = monthExp.reduce((s, d) => s + (d.self_spent || 0), 0);
-
-                const monthInc = income?.filter(tx => tx.date?.substring(0, 7) === m) || [];
-                const householdIncome = monthInc.reduce((s, tx) => s + (tx.amount || 0), 0);
-                const selfIncome = monthInc.reduce((s, tx) =>
-                    s + (tx.user_id === user.id ? tx.self_amount : tx.partner_amount || 0), 0);
-
-                const labelDate = new Date(parseInt(m.split('-')[0]), parseInt(m.split('-')[1]) - 1, 1);
-                const label = labelDate.toLocaleDateString('en-US', { month: 'short', ...(spanYears ? { year: '2-digit' } : {}) });
-
-                return {
-                    month: m, label,
-                    householdNet: householdIncome - totalExpense,
-                    selfNet: selfIncome - selfExpense,
-                    hasData: totalExpense > 0 || householdIncome > 0,
-                };
-            });
-
-            setRawData(result);
+            setCurrentUserId(user.id);
+            setFetchedMonths(months);
+            setFetchedExpenses(expenses || []);
+            setFetchedIncome(income || []);
+            setSpanYears(years.size > 1);
             setLoading(false);
         };
         fetchData();
     }, [selectedMonth]);
+
+    const rawData = useMemo(() =>
+        fetchedMonths.map(m => {
+            const monthExp = fetchedExpenses
+                .filter(d => d.month === m)
+                .filter(d => !alwaysExcludedCategories.includes(d.category))
+                .filter(d => !excludeSpecial || !specialCategories.includes(d.category));
+            const totalExpense = monthExp.reduce((s, d) => s + (d.total_spent || 0), 0);
+            const selfExpense  = monthExp.reduce((s, d) => s + (d.self_spent  || 0), 0);
+
+            const monthInc = fetchedIncome
+                .filter(tx => tx.date?.substring(0, 7) === m)
+                .filter(tx => !alwaysExcludedCategories.includes(tx.category))
+                .filter(tx => !excludeSpecial || !specialCategories.includes(tx.category));
+            const householdIncome = monthInc.reduce((s, tx) => s + (tx.amount || 0), 0);
+            const selfIncome      = monthInc.reduce((s, tx) =>
+                // For own transactions, self_amount is this user's share.
+                // For partner-posted transactions fetched via partner_id, partner_amount is this user's share.
+                s + (tx.user_id === currentUserId ? (tx.self_amount || 0) : (tx.partner_amount || 0))
+            , 0);
+
+            const labelDate = new Date(parseInt(m.split('-')[0]), parseInt(m.split('-')[1]) - 1, 1);
+            const label = labelDate.toLocaleDateString('en-US', { month: 'short', ...(spanYears ? { year: '2-digit' } : {}) });
+
+            return {
+                month: m, label,
+                householdNet: householdIncome - totalExpense,
+                selfNet: selfIncome - selfExpense,
+                hasData: totalExpense > 0 || householdIncome > 0,
+            };
+        }),
+        [fetchedMonths, fetchedExpenses, fetchedIncome, spanYears, currentUserId, excludeSpecial, specialCategories, alwaysExcludedCategories]
+    );
 
     const monthData = useMemo(() =>
         rawData.map(d => ({ ...d, net: viewMode === "household" ? d.householdNet : d.selfNet })),
@@ -100,24 +118,24 @@ export default function SavingsTrend({ selectedMonth, viewMode }) {
             </div>
 
             <div className="px-6 py-5">
-                <div className="flex items-end gap-2" style={{ height: '100px' }}>
+                <div className="flex items-end gap-1" style={{ height: '120px' }}>
                     {monthData.map((d) => {
                         const isSelected = d.month === selectedMonth;
                         const isPos = d.net >= 0;
                         const barH = d.hasData ? Math.max((Math.abs(d.net) / maxAbs) * 80, 6) : 4;
 
                         return (
-                            <div key={d.month} className="flex-1 flex flex-col items-center justify-end gap-1 h-full">
-                                <span className={`text-[10px] font-medium leading-none ${
+                            <div key={d.month} className="flex-1 flex flex-col items-center justify-end gap-1.5 h-full">
+                                <span className={`text-[10px] font-medium leading-none tabular-nums ${
                                     !d.hasData ? 'text-gray-200' : isPos ? 'text-green-500' : 'text-rose-500'
                                 }`}>
                                     {d.hasData ? fmt(d.net) : ''}
                                 </span>
                                 <div
-                                    className={`w-full rounded-t-lg transition-all duration-700 ${
+                                    className={`w-full rounded-t-md transition-all duration-700 ${
                                         !d.hasData ? 'bg-gray-100' :
                                         isPos ? 'bg-green-400' : 'bg-rose-400'
-                                    } ${isSelected ? 'opacity-100 ring-2 ring-gray-400 ring-offset-1' : 'opacity-60 hover:opacity-90'}`}
+                                    } ${isSelected ? 'opacity-100 ring-2 ring-offset-1 ring-gray-300' : 'opacity-50 hover:opacity-80'}`}
                                     style={{ height: `${barH}%` }}
                                 />
                                 <span className={`text-[10px] font-medium ${isSelected ? 'text-gray-700' : 'text-gray-400'}`}>

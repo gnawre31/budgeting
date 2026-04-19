@@ -5,6 +5,7 @@ import UploadPage from "./pages/UploadPage";
 import ReconciliationView from "./pages/ReconciliationView";
 import TransactionsPage from "./pages/TransactionsPage";
 import DashboardPage from "./pages/DashboardPage";
+import CategoriesPage from "./pages/CategoriesPage";
 import LoginPage from "./pages/LoginPage";
 
 export default function App() {
@@ -69,6 +70,7 @@ export default function App() {
           <NavLink to="/upload" className={navLinkClass}>Upload CSV</NavLink>
           <NavLink to="/reconcile" className={navLinkClass}>Reconcile</NavLink>
           <NavLink to="/transactions" className={navLinkClass}>Transactions</NavLink>
+          <NavLink to="/categories" className={navLinkClass}>Categories</NavLink>
 
           <div className="ml-auto flex items-center gap-3">
             <span className="text-sm text-gray-400 hidden sm:block">{displayName ?? user.email}</span>
@@ -88,6 +90,7 @@ export default function App() {
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/reconcile" element={<ReconciliationView />} />
           <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/categories" element={<CategoriesPage />} />
         </Routes>
       </main>
     </div>

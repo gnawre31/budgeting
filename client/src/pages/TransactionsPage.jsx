@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { createCategorizationRule } from "../services/transactionService";
+import { useCategories } from "../hooks/useCategories";
 
 const TYPE_OPTIONS = ["Income", "Expense"];
-const CATEGORY_OPTIONS = ["Other", "Restaurant", "Groceries", "Transportation", "Bill Payment", "Entertainment", "Shopping", "Rent", "Utilities", "Credit Card Payment", "Internal Transfer", "Salary", "Freelance", "E-Transfer", "Reimbursement", "Gift"];
+// Note: alwaysExcludedCategories comes from useCategories() hook below
 
 const inputCls = "w-full bg-transparent outline-none py-1 px-1.5 rounded-md text-sm transition-colors focus:bg-gray-100";
 
@@ -17,9 +18,15 @@ export default function TransactionsPage() {
     const [parentsLoading, setParentsLoading] = useState(false);
     const [activeChildId, setActiveChildId] = useState(null);
     const [potentialParents, setPotentialParents] = useState([]);
+    const [expandedNotes, setExpandedNotes] = useState(new Set());
+
+    const { expenseCategories, incomeCategories, alwaysExcludedCategories } = useCategories();
+    const categoryOptions = (type) => type === "Income" ? incomeCategories : expenseCategories;
+    const allCategoryOptions = [...new Set([...expenseCategories, ...incomeCategories])];
 
     const [selectedIds, setSelectedIds] = useState(new Set());
     const [bulkCategory, setBulkCategory] = useState("");
+    const [showBulkDeleteModal, setShowBulkDeleteModal] = useState(false);
 
     const [ruleSuggestion, setRuleSuggestion] = useState(null);
     const [ruleCreating, setRuleCreating] = useState(false);
@@ -33,6 +40,12 @@ export default function TransactionsPage() {
     const [inserting, setInserting] = useState(false);
     const [insertError, setInsertError] = useState(null);
     const [saveError, setSaveError] = useState(null);
+
+    const toggleNotes = (id) => setExpandedNotes(prev => {
+        const next = new Set(prev);
+        next.has(id) ? next.delete(id) : next.add(id);
+        return next;
+    });
 
     const fetchTransactions = useCallback(async () => {
         setLoading(true);
@@ -62,6 +75,7 @@ export default function TransactionsPage() {
         }));
         setPendingChanges({});
         setSelectedIds(new Set());
+        setExpandedNotes(new Set());
         setLoading(false);
     }, [filters]);
 
@@ -135,6 +149,24 @@ export default function TransactionsPage() {
         setLoading(true);
         try {
             const { error } = await supabase.from("transactions").delete().eq("id", id);
+            if (error) throw error;
+            await fetchTransactions();
+        } catch (err) { alert(err.message); setLoading(false); }
+    };
+
+    // Only own (non-flipped) transactions can be deleted — RLS blocks deleting partner rows
+    const deletableIds = Array.from(selectedIds).filter(id => {
+        const tx = transactions.find(t => t.id === id);
+        return tx && !tx._isFlipped;
+    });
+    const partnerSelectedCount = selectedIds.size - deletableIds.length;
+
+    const handleBulkDelete = async () => {
+        setShowBulkDeleteModal(false);
+        if (deletableIds.length === 0) return;
+        setLoading(true);
+        try {
+            const { error } = await supabase.from("transactions").delete().in("id", deletableIds);
             if (error) throw error;
             await fetchTransactions();
         } catch (err) { alert(err.message); setLoading(false); }
@@ -242,13 +274,14 @@ export default function TransactionsPage() {
     const someSelected = selectedIds.size > 0 && selectedIds.size < transactions.length;
     const hasPending = Object.keys(pendingChanges).length > 0;
 
-    const filterInputCls = "bg-gray-100 rounded-xl px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none border border-transparent focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20 transition-all";
+    // h-9 ensures select and input elements are the same height across browsers
+    const filterInputCls = "h-9 bg-gray-100 rounded-xl px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 outline-none border border-transparent focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20 transition-all";
     const modalInputCls = "w-full bg-gray-100 rounded-xl px-4 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 outline-none border border-transparent focus:bg-white focus:border-gray-300 focus:ring-2 focus:ring-blue-500/20 transition-all";
 
-    // Shared per-tx derived values used in both card and table
     const deriveTx = (tx) => {
         const changes = pendingChanges[tx.id] || {};
         const curCat = changes.category ?? tx.category;
+        const curType = changes.type ?? tx.type;
         const isSelected = selectedIds.has(tx.id);
         const isDirty = Object.keys(changes).length > 0;
         const originalRef = Math.abs(tx.original_amount ?? tx.amount ?? 0);
@@ -259,7 +292,11 @@ export default function TransactionsPage() {
         let displaySelf = Math.abs(changes.self_amount !== undefined ? changes.self_amount : (tx.self_amount ?? 0));
         let displayPartner = Math.abs(changes.partner_amount !== undefined ? changes.partner_amount : (tx.partner_amount ?? 0));
         if (Math.abs(liveNet - (displaySelf + displayPartner)) > 0.01) { displaySelf = liveNet; displayPartner = 0; }
-        return { changes, curCat, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner };
+        const curDescription = changes.description !== undefined ? changes.description : (tx.description || "");
+        const hasNotes = curDescription.trim().length > 0;
+        const isMandatoryExclude = alwaysExcludedCategories.includes(curCat);
+        const isExcluded = changes.exclude_from_report !== undefined ? changes.exclude_from_report : (tx.exclude_from_report || false);
+        return { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude };
     };
 
     const openParentModal = async (txId) => {
@@ -289,6 +326,12 @@ export default function TransactionsPage() {
                 if (e.key === 'Escape') { setEditingCell(null); e.target.blur(); }
             }}
         />
+    );
+
+    const NotesPencilIcon = () => (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+        </svg>
     );
 
     return (
@@ -401,8 +444,9 @@ export default function TransactionsPage() {
                         <button onClick={() => setShowInsertModal(true)} className="text-blue-500 hover:underline">Add one manually</button>.
                     </div>
                 ) : transactions.map(tx => {
-                    const { changes, curCat, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner } = deriveTx(tx);
+                    const { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude } = deriveTx(tx);
                     const fmt = (n) => `$${n.toFixed(2)}`;
+                    const notesOpen = expandedNotes.has(tx.id);
 
                     return (
                         <div key={tx.id}
@@ -421,22 +465,40 @@ export default function TransactionsPage() {
                                             onChange={e => stageChange(tx.id, "merchant", e.target.value)}
                                             className="font-semibold text-gray-900 text-sm bg-transparent outline-none w-full truncate focus:bg-gray-100 rounded px-1 py-0.5 -mx-1"
                                         />
+                                        <button
+                                            onClick={() => toggleNotes(tx.id)}
+                                            title={notesOpen ? "Hide note" : hasNotes ? "Edit note" : "Add note"}
+                                            className={`shrink-0 p-1 rounded-md transition-colors ${notesOpen || hasNotes ? 'text-blue-400 bg-blue-50' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}
+                                        >
+                                            <NotesPencilIcon />
+                                        </button>
                                     </div>
-                                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                    {/* Notes preview */}
+                                    {hasNotes && !notesOpen && (
+                                        <p onClick={() => toggleNotes(tx.id)} className="text-[11px] text-gray-400 truncate mt-0.5 px-1 cursor-pointer hover:text-gray-600 transition-colors">
+                                            {curDescription}
+                                        </p>
+                                    )}
+                                    <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                                         <input type="date" value={changes.date ?? tx.date}
                                             onChange={e => stageChange(tx.id, "date", e.target.value)}
                                             className="text-xs text-gray-400 bg-transparent outline-none focus:bg-gray-100 rounded px-1 py-0.5 -mx-1" />
                                         <span className="text-gray-200">·</span>
-                                        <select value={changes.type ?? tx.type}
-                                            onChange={e => stageChange(tx.id, "type", e.target.value)}
-                                            className="text-xs text-gray-500 bg-transparent outline-none focus:bg-gray-100 rounded px-1 py-0.5 -mx-1 cursor-pointer">
-                                            {TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                                        </select>
+                                        {/* Income/Expense pill toggle */}
+                                        <div className="flex rounded-md overflow-hidden border border-gray-200">
+                                            {TYPE_OPTIONS.map((type) => (
+                                                <button key={type}
+                                                    onClick={() => { if (curType !== type) stageChange(tx.id, "type", type); }}
+                                                    className={`text-[11px] font-medium px-1.5 py-0.5 transition-colors ${curType === type ? (type === "Income" ? "bg-green-500 text-white" : "bg-rose-500 text-white") : "bg-white text-gray-400 hover:bg-gray-50"}`}>
+                                                    {type}
+                                                </button>
+                                            ))}
+                                        </div>
                                         <span className="text-gray-200">·</span>
                                         <select value={curCat}
                                             onChange={e => stageChange(tx.id, "category", e.target.value)}
                                             className="text-xs text-gray-500 bg-transparent outline-none focus:bg-gray-100 rounded px-1 py-0.5 -mx-1 cursor-pointer max-w-[130px]">
-                                            {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                                            {categoryOptions(curType).map(c => <option key={c}>{c}</option>)}
                                         </select>
                                     </div>
                                 </div>
@@ -447,6 +509,23 @@ export default function TransactionsPage() {
                                     )}
                                 </div>
                             </div>
+
+                            {/* Expandable notes */}
+                            {notesOpen && (
+                                <div className="mt-2.5 flex items-center gap-2 bg-blue-50/60 rounded-xl px-3 py-2">
+                                    <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider shrink-0">Note</span>
+                                    <input
+                                        type="text"
+                                        autoFocus
+                                        value={curDescription}
+                                        onChange={e => stageChange(tx.id, "description", e.target.value)}
+                                        placeholder="Add a note…"
+                                        className="flex-1 text-sm text-gray-700 bg-white border border-blue-100 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300 placeholder:text-gray-300 transition-all"
+                                        onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') toggleNotes(tx.id); }}
+                                    />
+                                    <button onClick={() => toggleNotes(tx.id)} className="text-xs text-blue-400 hover:text-blue-600 shrink-0">Done</button>
+                                </div>
+                            )}
 
                             {/* Split row */}
                             <div className="mt-3 grid grid-cols-2 gap-2 border-t border-gray-100 pt-3">
@@ -477,7 +556,7 @@ export default function TransactionsPage() {
                             </div>
 
                             {/* Actions row */}
-                            <div className="mt-2.5 flex items-center gap-2">
+                            <div className="mt-2.5 flex items-center gap-1.5">
                                 {curCat === "Reimbursement" ? (
                                     <button onClick={() => openParentModal(tx.id)}
                                         className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors ${(changes._parent_name || tx.parent?.merchant) ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 bg-gray-100 hover:bg-gray-200'}`}>
@@ -486,15 +565,32 @@ export default function TransactionsPage() {
                                 ) : (
                                     <>
                                         <button onClick={() => stageChange(tx.id, "self_amount", liveNet / 2)}
-                                            className="text-xs font-medium text-gray-400 hover:text-blue-500 transition-colors px-2.5 py-1 bg-gray-100 hover:bg-gray-200 rounded-lg">
+                                            className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors">
                                             Split 50/50
                                         </button>
-                                        {totalReimb > 0 && <span className="text-xs text-blue-500 font-medium">Linked</span>}
+                                        {totalReimb > 0 && <span className="text-xs text-blue-500 font-medium px-1">Linked</span>}
                                     </>
                                 )}
+                                {/* Exclude toggle */}
+                                <button
+                                    onClick={() => !isMandatoryExclude && stageChange(tx.id, "exclude_from_report", !isExcluded)}
+                                    title={isMandatoryExclude ? "Always excluded from reports" : isExcluded ? "Include in reports" : "Exclude from reports"}
+                                    className={`p-1.5 rounded-lg transition-colors ${
+                                        isMandatoryExclude
+                                            ? "text-blue-400 bg-blue-50 cursor-default"
+                                            : isExcluded
+                                                ? "text-gray-500 bg-gray-200 hover:bg-gray-300"
+                                                : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
+                                    }`}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                    </svg>
+                                </button>
+                                {/* Delete */}
                                 <button onClick={() => handleDelete(tx.id)}
-                                    className="ml-auto text-gray-300 hover:text-rose-500 transition-colors p-1">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                                    className="p-1.5 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors ml-auto">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
                                         <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                                     </svg>
                                 </button>
@@ -517,16 +613,16 @@ export default function TransactionsPage() {
                                         className="h-3.5 w-3.5 cursor-pointer accent-blue-500" />
                                 </th>
                                 <th className="px-4 py-3 w-36 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
-                                <th className="px-4 py-3 min-w-[180px] text-xs font-semibold text-gray-500 uppercase tracking-wider">Merchant</th>
-                                <th className="px-4 py-3 w-28 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
-                                <th className="px-4 py-3 w-44 text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
-                                <th className="px-4 py-3 w-32 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total</th>
-                                <th className="px-4 py-3 w-32 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Self</th>
-                                <th className="px-4 py-3 w-32 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Partner</th>
-                                <th className="px-4 py-3 w-40 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
+                                <th className="px-4 py-3 min-w-[160px] text-xs font-semibold text-gray-500 uppercase tracking-wider">Merchant</th>
+                                <th className="px-4 py-3 w-36 text-xs font-semibold text-gray-500 uppercase tracking-wider">Type</th>
+                                <th className="px-4 py-3 w-40 text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
+                                <th className="px-4 py-3 w-36 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Total</th>
+                                <th className="px-4 py-3 w-36 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Self</th>
+                                <th className="px-4 py-3 w-36 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Partner</th>
+                                <th className="px-4 py-3 w-44 text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-50">
+                        <tbody>
                             {transactions.length === 0 && !loading ? (
                                 <tr>
                                     <td colSpan={9} className="px-4 py-16 text-center text-sm text-gray-400">
@@ -535,68 +631,134 @@ export default function TransactionsPage() {
                                     </td>
                                 </tr>
                             ) : transactions.map(tx => {
-                                const { changes, curCat, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner } = deriveTx(tx);
+                                const { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude } = deriveTx(tx);
+                                const notesOpen = expandedNotes.has(tx.id);
 
                                 return (
-                                    <tr key={tx.id} className={`transition-colors ${isSelected ? 'bg-blue-50/60' : isDirty ? 'bg-slate-50/60' : 'hover:bg-gray-50/60'}`}>
-                                        <td className="px-4 py-2.5">
-                                            <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx.id)}
-                                                className="h-3.5 w-3.5 cursor-pointer accent-blue-500" />
-                                        </td>
-                                        <td className="px-4 py-2.5">
-                                            <input type="date" value={changes.date ?? tx.date} onChange={e => stageChange(tx.id, "date", e.target.value)} className={inputCls} />
-                                        </td>
-                                        <td className="px-4 py-2.5">
-                                            <div className="flex items-center gap-1.5">
-                                                {tx._isFlipped && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" title="Partner's transaction" />}
-                                                <input type="text" value={changes.merchant ?? tx.merchant} onChange={e => stageChange(tx.id, "merchant", e.target.value)} className={`${inputCls} font-medium`} />
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-2.5">
-                                            <select value={changes.type ?? tx.type} onChange={e => stageChange(tx.id, "type", e.target.value)} className={`${inputCls} cursor-pointer`}>
-                                                {TYPE_OPTIONS.map(o => <option key={o}>{o}</option>)}
-                                            </select>
-                                        </td>
-                                        <td className="px-4 py-2.5">
-                                            <select value={curCat} onChange={e => stageChange(tx.id, "category", e.target.value)} className={`${inputCls} cursor-pointer text-gray-500`}>
-                                                {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
-                                            </select>
-                                        </td>
-                                        <td className="px-4 py-2.5 text-right">
-                                            <div className="flex flex-col items-end">
-                                                {renderNumInput(tx, "amount", liveNet, totalReimb > 0)}
-                                                {totalReimb > 0 && curCat !== "Reimbursement" && (
-                                                    <span className="text-[10px] text-gray-400">Base ${originalRef.toFixed(2)}</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-4 py-2.5 text-right">{renderNumInput(tx, "self_amount", displaySelf)}</td>
-                                        <td className="px-4 py-2.5 text-right">{renderNumInput(tx, "partner_amount", displayPartner)}</td>
-                                        <td className="px-4 py-2.5">
-                                            <div className="flex items-center gap-2">
-                                                {curCat === "Reimbursement" ? (
-                                                    <button onClick={() => openParentModal(tx.id)}
-                                                        className={`text-xs font-medium px-2 py-1 rounded-lg transition-colors ${(changes._parent_name || tx.parent?.merchant) ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 bg-gray-100 hover:bg-gray-200'}`}>
-                                                        {changes._parent_name ?? tx.parent?.merchant ?? "Link parent"}
+                                    <React.Fragment key={tx.id}>
+                                        <tr className={`border-b ${notesOpen ? 'border-gray-50' : 'border-gray-100'} transition-colors ${isSelected ? 'bg-blue-50/60' : isDirty ? 'bg-slate-50/60' : 'hover:bg-gray-50/60'} ${isExcluded && !isMandatoryExclude ? 'opacity-50' : ''}`}>
+                                            <td className="px-4 py-2.5">
+                                                <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx.id)}
+                                                    className="h-3.5 w-3.5 cursor-pointer accent-blue-500" />
+                                            </td>
+                                            <td className="px-4 py-2.5">
+                                                <input type="date" value={changes.date ?? tx.date} onChange={e => stageChange(tx.id, "date", e.target.value)} className={inputCls} />
+                                            </td>
+                                            {/* Merchant + notes */}
+                                            <td className="px-4 py-2.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    {tx._isFlipped && <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" title="Partner's transaction" />}
+                                                    <div className="flex-1 min-w-0">
+                                                        <input type="text" value={changes.merchant ?? tx.merchant} onChange={e => stageChange(tx.id, "merchant", e.target.value)} className={`${inputCls} font-medium`} />
+                                                        {hasNotes && !notesOpen && (
+                                                            <p onClick={() => toggleNotes(tx.id)}
+                                                                className="text-[11px] text-gray-400 truncate mt-0.5 px-1.5 cursor-pointer hover:text-gray-600 transition-colors"
+                                                                title={curDescription}>
+                                                                {curDescription}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => toggleNotes(tx.id)}
+                                                        title={notesOpen ? "Hide note" : hasNotes ? "Edit note" : "Add note"}
+                                                        className={`shrink-0 p-1 rounded-md transition-colors ${notesOpen || hasNotes ? 'text-blue-400 bg-blue-50 hover:bg-blue-100' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}
+                                                    >
+                                                        <NotesPencilIcon />
                                                     </button>
-                                                ) : (
-                                                    <>
-                                                        <button onClick={() => stageChange(tx.id, "self_amount", liveNet / 2)}
-                                                            className="text-xs font-medium text-gray-400 hover:text-blue-500 transition-colors">
-                                                            Split
+                                                </div>
+                                            </td>
+                                            {/* Type — Income/Expense pill toggle */}
+                                            <td className="px-4 py-2.5">
+                                                <div className="flex rounded-lg overflow-hidden border border-gray-200 w-fit">
+                                                    {TYPE_OPTIONS.map((type) => (
+                                                        <button key={type}
+                                                            onClick={() => { if (curType !== type) stageChange(tx.id, "type", type); }}
+                                                            className={`text-xs font-medium px-2.5 py-1 transition-colors whitespace-nowrap ${curType === type ? (type === "Income" ? "bg-green-500 text-white" : "bg-rose-500 text-white") : "bg-white text-gray-400 hover:bg-gray-50"}`}>
+                                                            {type}
                                                         </button>
-                                                        {totalReimb > 0 && <span className="text-xs text-blue-500 font-medium">Linked</span>}
-                                                    </>
-                                                )}
-                                                <button onClick={() => handleDelete(tx.id)}
-                                                    className="ml-auto text-gray-300 hover:text-rose-500 transition-colors p-0.5">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-3.5 h-3.5">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                                                    </svg>
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
+                                                    ))}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-2.5">
+                                                <select value={curCat} onChange={e => stageChange(tx.id, "category", e.target.value)} className={`${inputCls} cursor-pointer text-gray-500`}>
+                                                    {categoryOptions(curType).map(c => <option key={c}>{c}</option>)}
+                                                </select>
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right">
+                                                <div className="flex flex-col items-end">
+                                                    {renderNumInput(tx, "amount", liveNet, totalReimb > 0)}
+                                                    {totalReimb > 0 && curCat !== "Reimbursement" && (
+                                                        <span className="text-[10px] text-gray-400">Base ${originalRef.toFixed(2)}</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-2.5 text-right">{renderNumInput(tx, "self_amount", displaySelf)}</td>
+                                            <td className="px-4 py-2.5 text-right">{renderNumInput(tx, "partner_amount", displayPartner)}</td>
+                                            <td className="px-4 py-2.5">
+                                                <div className="flex items-center justify-center gap-1">
+                                                    {curCat === "Reimbursement" ? (
+                                                        <button onClick={() => openParentModal(tx.id)}
+                                                            className={`text-xs font-medium px-2.5 py-1 rounded-lg transition-colors ${(changes._parent_name || tx.parent?.merchant) ? 'text-blue-500 bg-blue-50 hover:bg-blue-100' : 'text-gray-400 bg-gray-100 hover:bg-gray-200'}`}>
+                                                            {changes._parent_name ?? tx.parent?.merchant ?? "Link parent"}
+                                                        </button>
+                                                    ) : (
+                                                        <>
+                                                            <button onClick={() => stageChange(tx.id, "self_amount", liveNet / 2)}
+                                                                className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition-colors">
+                                                                Split
+                                                            </button>
+                                                            {totalReimb > 0 && <span className="text-xs text-blue-500 font-medium px-1">Linked</span>}
+                                                        </>
+                                                    )}
+                                                    {/* Exclude toggle */}
+                                                    <button
+                                                        onClick={() => !isMandatoryExclude && stageChange(tx.id, "exclude_from_report", !isExcluded)}
+                                                        title={isMandatoryExclude ? "Always excluded from reports" : isExcluded ? "Include in reports" : "Exclude from reports"}
+                                                        className={`p-1.5 rounded-lg transition-colors ${
+                                                            isMandatoryExclude
+                                                                ? "text-blue-400 bg-blue-50 cursor-default"
+                                                                : isExcluded
+                                                                    ? "text-gray-500 bg-gray-200 hover:bg-gray-300"
+                                                                    : "text-gray-300 hover:text-gray-500 hover:bg-gray-100"
+                                                        }`}
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                                                        </svg>
+                                                    </button>
+                                                    {/* Delete */}
+                                                    <button onClick={() => handleDelete(tx.id)}
+                                                        className="p-1.5 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors"
+                                                        title="Delete transaction">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                        {/* Expandable notes row */}
+                                        {notesOpen && (
+                                            <tr className="border-b border-gray-100 bg-blue-50/30">
+                                                <td colSpan={2} />
+                                                <td colSpan={7} className="px-4 pb-2.5 pt-1">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider shrink-0">Note</span>
+                                                        <input
+                                                            type="text"
+                                                            autoFocus
+                                                            value={curDescription}
+                                                            onChange={e => stageChange(tx.id, "description", e.target.value)}
+                                                            placeholder="Add a note for this transaction…"
+                                                            className="flex-1 text-sm text-gray-700 bg-white border border-blue-100 rounded-lg px-3 py-1.5 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-500/10 placeholder:text-gray-300 transition-all"
+                                                            onKeyDown={e => { if (e.key === 'Enter' || e.key === 'Escape') toggleNotes(tx.id); }}
+                                                        />
+                                                        <button onClick={() => toggleNotes(tx.id)} className="text-xs text-blue-400 hover:text-blue-600 shrink-0 transition-colors">Done</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </React.Fragment>
                                 );
                             })}
                         </tbody>
@@ -612,11 +774,21 @@ export default function TransactionsPage() {
                     <select value={bulkCategory} onChange={e => setBulkCategory(e.target.value)}
                         className="bg-white/10 text-white text-sm rounded-lg px-2 sm:px-3 py-1.5 outline-none border border-white/20 cursor-pointer min-w-0">
                         <option value="">Recategorize…</option>
-                        {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                        {allCategoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <button onClick={handleBulkRecategorize} disabled={!bulkCategory}
                         className="bg-blue-500 hover:bg-blue-400 disabled:opacity-40 text-white text-sm font-medium px-3 sm:px-4 py-1.5 rounded-lg transition-colors shrink-0">
                         Apply
+                    </button>
+                    <div className="w-px h-4 bg-white/20 shrink-0" />
+                    <button
+                        onClick={() => setShowBulkDeleteModal(true)}
+                        className="flex items-center gap-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 hover:text-rose-300 text-sm font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                        Delete
                     </button>
                     <button onClick={() => setSelectedIds(new Set())} className="text-gray-400 hover:text-white text-sm transition-colors shrink-0">Clear</button>
                 </div>
@@ -659,7 +831,7 @@ export default function TransactionsPage() {
                                 <div>
                                     <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1.5">Category</label>
                                     <select value={insertForm.category} onChange={e => handleInsertField("category", e.target.value)} className={modalInputCls}>
-                                        {CATEGORY_OPTIONS.map(c => <option key={c}>{c}</option>)}
+                                        {categoryOptions(insertForm.type).map(c => <option key={c}>{c}</option>)}
                                     </select>
                                 </div>
                             </div>
@@ -747,6 +919,46 @@ export default function TransactionsPage() {
                 </div>
             )}
 
+            {/* Bulk delete confirmation modal */}
+            {showBulkDeleteModal && (
+                <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                        <div className="px-6 pt-6 pb-4 text-center">
+                            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mx-auto mb-4">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-6 h-6 text-rose-500">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                                Delete {deletableIds.length} transaction{deletableIds.length !== 1 ? 's' : ''}?
+                            </h3>
+                            <p className="text-sm text-gray-500">
+                                This will permanently remove {deletableIds.length === 1 ? 'this transaction' : `all ${deletableIds.length} selected transactions`} from your records. This cannot be undone.
+                            </p>
+                            {partnerSelectedCount > 0 && (
+                                <p className="mt-2 text-xs text-amber-600 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                                    {partnerSelectedCount} partner-posted transaction{partnerSelectedCount !== 1 ? 's' : ''} will be skipped — only the partner who posted them can delete them.
+                                </p>
+                            )}
+                        </div>
+                        <div className="px-6 pb-6 flex gap-3">
+                            <button
+                                onClick={() => setShowBulkDeleteModal(false)}
+                                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 rounded-xl text-sm font-medium text-gray-700 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleBulkDelete}
+                                className="flex-1 py-2.5 bg-rose-500 hover:bg-rose-600 rounded-xl text-sm font-medium text-white transition-colors"
+                            >
+                                Delete {deletableIds.length === 1 ? 'transaction' : `${deletableIds.length} transactions`}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Parent modal */}
             {showParentModal && (
                 <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-end sm:items-center justify-center z-[110] p-0 sm:p-4">
@@ -782,5 +994,13 @@ export default function TransactionsPage() {
                 </div>
             )}
         </div>
+    );
+}
+
+function NotesPencilIcon() {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-3.5 h-3.5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+        </svg>
     );
 }

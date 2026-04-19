@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useCategories } from "../hooks/useCategories";
 
-export default function CategoryPacing({ selectedMonth, viewMode }) {
+function getStatusKey(catSpent, activeBudget) {
+    if (!activeBudget) return "unbudgeted";
+    const pct = catSpent / activeBudget;
+    if (pct > 1)    return "over";
+    if (pct > 0.75) return "near";
+    return "within";
+}
+
+export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [] }) {
+    const { expenseCategories } = useCategories();
+
     const [pacingData, setPacingData] = useState([]);
     const [prevMonthData, setPrevMonthData] = useState([]);
     const [incomeStats, setIncomeStats] = useState({ household: 0, self: 0 });
@@ -77,27 +88,28 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
 
             setIncomeStats({ household: householdIncome, self: selfIncome });
 
-            const allCategories = new Set([...Object.keys(budgets), ...(expenseData?.map(d => d.category) || [])]);
+            // Show every expense category that isn't always-excluded; merge in actual spend where it exists
+            const allCategories = new Set([
+                ...expenseCategories.filter(c => !alwaysExcludedCategories.includes(c)),
+                ...Object.keys(budgets).filter(c => !alwaysExcludedCategories.includes(c)),
+                ...(expenseData?.map(d => d.category).filter(c => !alwaysExcludedCategories.includes(c)) || []),
+            ]);
             const merged = Array.from(allCategories).map(category => {
                 const db = expenseData?.find(d => d.category === category);
                 return {
                     category,
-                    budget: budgets[category] || 0,
-                    self_amount: db?.self_spent || 0,
+                    budget:         budgets[category] || 0,
+                    self_amount:    db?.self_spent    || 0,
                     partner_amount: db?.partner_spent || 0,
-                    total_amount: db?.total_spent || 0,
+                    total_amount:   db?.total_spent   || 0,
                 };
-            }).sort((a, b) => {
-                const pA = a.budget ? a.total_amount / a.budget : 0;
-                const pB = b.budget ? b.total_amount / b.budget : 0;
-                return pB - pA;
             });
 
             setPacingData(merged);
             setLoading(false);
         };
         fetchData();
-    }, [selectedMonth, budgets]);
+    }, [selectedMonth, budgets, expenseCategories, alwaysExcludedCategories]);
 
     const saveBudget = (category) => {
         let val = Number(editValue) || 0;
@@ -108,9 +120,31 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
         setEditingCategory(null);
     };
 
+    const statusOrder = { over: 0, near: 1, within: 2, unbudgeted: 3 };
+
+    // Flat sorted list: over → near → within → unbudgeted, then by spend % desc within group
+    const sortedData = useMemo(() => {
+        return [...pacingData]
+            .filter(cat => !excludeSpecial || !specialCategories.includes(cat.category))
+            .map(cat => {
+                const activeBudget = viewMode === "household" ? cat.budget : cat.budget / 2;
+                const catSpent    = viewMode === "household" ? cat.total_amount : cat.self_amount;
+                const statusKey   = getStatusKey(catSpent, activeBudget);
+                const pct         = activeBudget ? catSpent / activeBudget : 0;
+                return { ...cat, statusKey, pct };
+            })
+            .sort((a, b) => {
+                const og = statusOrder[a.statusKey] - statusOrder[b.statusKey];
+                return og !== 0 ? og : b.pct - a.pct;
+            });
+    }, [pacingData, viewMode, excludeSpecial, specialCategories]);
+
     const activeIncome = viewMode === "household" ? incomeStats.household : incomeStats.self;
-    const activeExpense = pacingData.reduce((s, c) => s + (viewMode === "household" ? c.total_amount : c.self_amount), 0);
-    const activeTotalBudget = pacingData.reduce((s, c) => s + c.budget, 0) / (viewMode === "household" ? 1 : 2);
+    const filteredPacingData = excludeSpecial
+        ? pacingData.filter(c => !specialCategories.includes(c.category))
+        : pacingData;
+    const activeExpense = filteredPacingData.reduce((s, c) => s + (viewMode === "household" ? c.total_amount : c.self_amount), 0);
+    const activeTotalBudget = filteredPacingData.reduce((s, c) => s + c.budget, 0) / (viewMode === "household" ? 1 : 2);
 
     const netCash = activeIncome - activeExpense;
     const isNegativeNet = netCash < 0;
@@ -137,7 +171,6 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
 
             {/* KPI cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-gray-100">
-                {/* Cash flow */}
                 <div className="bg-white px-6 py-5">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                         {viewMode === 'self' ? 'My Cash Flow' : 'Cash Flow'}
@@ -160,7 +193,6 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                     </div>
                 </div>
 
-                {/* Budget health */}
                 <div className="bg-white px-6 py-5">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Budget Health</p>
                     <div className="flex items-baseline gap-2 mb-4">
@@ -182,8 +214,9 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                 </div>
             </div>
 
-            {/* Category breakdown */}
+            {/* Category grid */}
             <div className="px-6 py-5">
+                {/* Legend */}
                 <div className="flex items-center justify-between mb-5">
                     <h3 className="text-sm font-semibold text-gray-900">Categories</h3>
                     <div className="flex items-center gap-3 text-xs text-gray-400">
@@ -199,118 +232,129 @@ export default function CategoryPacing({ selectedMonth, viewMode }) {
                         No expenses for {displayMonthName}.
                     </div>
                 ) : (
-                    <div className="space-y-6">
-                        {pacingData.map((cat) => {
-                            const activeBudget = viewMode === "household" ? cat.budget : cat.budget / 2;
-                            const hasBudget = activeBudget > 0;
-                            const catSpent = viewMode === "household" ? cat.total_amount : cat.self_amount;
-                            const isOver = hasBudget && catSpent > activeBudget;
+                    <div className="grid grid-cols-2 gap-3">
+                                    {sortedData.map((cat) => {
+                                        const activeBudget = viewMode === "household" ? cat.budget : cat.budget / 2;
+                                        const hasBudget    = activeBudget > 0;
+                                        const catSpent     = viewMode === "household" ? cat.total_amount : cat.self_amount;
+                                        const isOver       = hasBudget && catSpent > activeBudget;
 
-                            const selfPct = hasBudget ? Math.min((cat.self_amount / activeBudget) * 100, 100) : 0;
-                            const partnerPct = (viewMode === "household" && hasBudget)
-                                ? Math.min((cat.partner_amount / activeBudget) * 100, 100 - selfPct) : 0;
+                                        const selfPct    = hasBudget ? Math.min((cat.self_amount    / activeBudget) * 100, 100) : 0;
+                                        const partnerPct = (viewMode === "household" && hasBudget)
+                                            ? Math.min((cat.partner_amount / activeBudget) * 100, 100 - selfPct) : 0;
 
-                            const prevRecord = prevMonthData.find(d => d.category === cat.category);
-                            const prevSpend = prevRecord
-                                ? (viewMode === "household" ? prevRecord.total_spent : prevRecord.self_spent) || 0 : 0;
-                            const delta = catSpent - prevSpend;
+                                        const prevRecord = prevMonthData.find(d => d.category === cat.category);
+                                        const prevSpend  = prevRecord
+                                            ? (viewMode === "household" ? prevRecord.total_spent : prevRecord.self_spent) || 0 : 0;
+                                        const delta = catSpent - prevSpend;
 
-                            const projected = (isCurrentMonth && pacingPercent > 5)
-                                ? catSpent / (pacingPercent / 100) : null;
-                            const projectedOver = projected !== null && hasBudget && projected > activeBudget;
+                                        const projected     = (isCurrentMonth && pacingPercent > 5)
+                                            ? catSpent / (pacingPercent / 100) : null;
+                                        const projectedOver = projected !== null && hasBudget && projected > activeBudget;
 
-                            return (
-                                <div key={cat.category} className="group relative">
-                                    <div className="flex items-center justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <span className="text-sm font-medium text-gray-800">{cat.category}</span>
-                                            {prevSpend > 0 && (
-                                                <span className={`text-xs px-1.5 py-0.5 rounded-md font-medium ${
-                                                    delta > 0 ? 'bg-rose-50 text-rose-500' : 'bg-green-50 text-green-600'
-                                                }`}>
-                                                    {delta > 0 ? '↑' : '↓'}{fmt(Math.abs(delta))}
-                                                </span>
-                                            )}
-                                        </div>
+                                        const barColor = isOver
+                                            ? "bg-rose-400"
+                                            : cat.statusKey === "near"
+                                                ? "bg-amber-400"
+                                                : "bg-indigo-400";
 
-                                        <div className="flex items-center gap-1.5 text-sm">
-                                            <span className={`font-semibold ${isOver ? 'text-rose-500' : 'text-gray-800'}`}>
-                                                {fmt(catSpent)}
-                                            </span>
-                                            <span className="text-gray-300">/</span>
-                                            {editingCategory === cat.category ? (
-                                                <div className="flex items-center gap-0.5">
-                                                    <span className="text-gray-400 text-xs">$</span>
-                                                    <input
-                                                        autoFocus
-                                                        type="number"
-                                                        className="w-16 text-sm font-medium text-indigo-500 bg-indigo-50 rounded-lg px-1.5 py-0.5 outline-none border border-indigo-200"
-                                                        value={editValue}
-                                                        onChange={(e) => setEditValue(e.target.value)}
-                                                        onBlur={() => saveBudget(cat.category)}
-                                                        onKeyDown={(e) => e.key === 'Enter' && saveBudget(cat.category)}
-                                                    />
+                                        return (
+                                            <div key={cat.category} className="bg-gray-50 rounded-xl p-3 group relative">
+                                                {/* Header row */}
+                                                <div className="flex items-start justify-between gap-1 mb-2">
+                                                    <span className="text-xs font-semibold text-gray-700 leading-tight">{cat.category}</span>
+                                                    {prevSpend > 0 && (
+                                                        <span className={`text-[10px] px-1 py-0.5 rounded font-medium shrink-0 ${
+                                                            delta > 0 ? 'bg-rose-50 text-rose-400' : 'bg-green-50 text-green-600'
+                                                        }`}>
+                                                            {delta > 0 ? '↑' : '↓'}{fmt(Math.abs(delta))}
+                                                        </span>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <button
-                                                    onClick={() => { setEditingCategory(cat.category); setEditValue(activeBudget); }}
-                                                    className="text-gray-400 hover:text-indigo-500 transition-colors text-sm group-hover:underline decoration-dashed underline-offset-2"
-                                                    title="Edit budget"
-                                                >
-                                                    {fmt(activeBudget)}
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
 
-                                    {/* Bar */}
-                                    <div className="relative h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                        {hasBudget ? (
-                                            <>
-                                                <div
-                                                    className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-rose-400' : 'bg-indigo-400'}`}
-                                                    style={{ width: `${selfPct}%` }}
-                                                />
-                                                {viewMode === "household" && (
+                                                {/* Amounts */}
+                                                <div className="flex items-baseline gap-1 mb-2.5">
+                                                    <span className={`text-base font-bold ${isOver ? 'text-rose-500' : 'text-gray-800'}`}>
+                                                        {fmt(catSpent)}
+                                                    </span>
+                                                    <span className="text-gray-300 text-xs">/</span>
+                                                    {editingCategory === cat.category ? (
+                                                        <div className="flex items-center gap-0.5">
+                                                            <span className="text-gray-400 text-xs">$</span>
+                                                            <input
+                                                                autoFocus
+                                                                type="number"
+                                                                className="w-14 text-xs font-medium text-indigo-500 bg-indigo-50 rounded px-1 py-0.5 outline-none border border-indigo-200"
+                                                                value={editValue}
+                                                                onChange={(e) => setEditValue(e.target.value)}
+                                                                onBlur={() => saveBudget(cat.category)}
+                                                                onKeyDown={(e) => e.key === 'Enter' && saveBudget(cat.category)}
+                                                            />
+                                                        </div>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => { setEditingCategory(cat.category); setEditValue(activeBudget || ''); }}
+                                                            className={`text-xs font-medium transition-colors group-hover:underline decoration-dashed underline-offset-2 ${
+                                                                hasBudget ? 'text-gray-400 hover:text-indigo-500' : 'text-gray-300 hover:text-indigo-400'
+                                                            }`}
+                                                            title="Edit budget"
+                                                        >
+                                                            {hasBudget ? fmt(activeBudget) : 'set budget'}
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                {/* Progress bar */}
+                                                <div className="h-1 bg-gray-200 rounded-full overflow-hidden relative">
+                                                    {hasBudget ? (
+                                                        <>
+                                                            <div
+                                                                className={`absolute left-0 top-0 h-full rounded-full transition-all duration-700 ${barColor}`}
+                                                                style={{ width: `${selfPct}%` }}
+                                                            />
+                                                            {viewMode === "household" && (
+                                                                <div
+                                                                    className={`absolute top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-rose-300' : 'bg-teal-400'}`}
+                                                                    style={{ left: `${selfPct}%`, width: `${partnerPct}%` }}
+                                                                />
+                                                            )}
+                                                        </>
+                                                    ) : (
+                                                        <div
+                                                            className="h-full bg-gray-300 rounded-full"
+                                                            style={{ width: `100%` }}
+                                                        />
+                                                    )}
+                                                </div>
+
+                                                {/* Pacing tick */}
+                                                {hasBudget && pacingPercent > 0 && pacingPercent <= 100 && (
                                                     <div
-                                                        className={`absolute top-0 h-full rounded-full transition-all duration-700 ${isOver ? 'bg-rose-300' : 'bg-teal-400'}`}
-                                                        style={{ left: `${selfPct}%`, width: `${partnerPct}%` }}
+                                                        className="absolute w-px h-2.5 bg-gray-400/60 rounded-full"
+                                                        style={{ left: `calc(${pacingPercent}% + 12px - 0.5px)`, bottom: '22px' }}
                                                     />
                                                 )}
-                                            </>
-                                        ) : (
-                                            <div className="h-full w-full bg-slate-300 rounded-full" />
-                                        )}
-                                    </div>
 
-                                    {/* Pacing tick */}
-                                    {hasBudget && pacingPercent > 0 && pacingPercent <= 100 && (
-                                        <div
-                                            className="absolute w-0.5 h-3 bg-gray-400 rounded-full -mt-3"
-                                            style={{ left: `calc(${pacingPercent}% - 1px)` }}
-                                        />
-                                    )}
-
-                                    {/* Sub-labels */}
-                                    <div className="flex justify-between mt-1.5">
-                                        <span className={`text-xs ${
-                                            !hasBudget && catSpent > 0 ? 'text-slate-500 font-medium' :
-                                            isOver ? 'text-rose-500 font-medium' :
-                                            hasBudget ? 'text-gray-400' : ''
-                                        }`}>
-                                            {!hasBudget && catSpent > 0 ? 'Unbudgeted' :
-                                             isOver ? `${fmt(catSpent - activeBudget)} over` :
-                                             hasBudget ? `${fmt(activeBudget - catSpent)} left` : ''}
-                                        </span>
-                                        {projected !== null && hasBudget && (
-                                            <span className={`text-xs font-medium ${projectedOver ? 'text-rose-400' : 'text-gray-400'}`}>
-                                                ~{fmt(projected)} projected{projectedOver ? ' ⚠' : ''}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
+                                                {/* Sub-labels */}
+                                                <div className="flex justify-between mt-1.5">
+                                                    <span className={`text-[10px] ${
+                                                        !hasBudget && catSpent > 0 ? 'text-gray-400' :
+                                                        isOver ? 'text-rose-500 font-medium' :
+                                                        hasBudget ? 'text-gray-400' : 'text-gray-300'
+                                                    }`}>
+                                                        {!hasBudget && catSpent > 0 ? fmt(catSpent) + ' spent' :
+                                                         isOver ? fmt(catSpent - activeBudget) + ' over' :
+                                                         hasBudget ? fmt(activeBudget - catSpent) + ' left' : ''}
+                                                    </span>
+                                                    {projected !== null && hasBudget && (
+                                                        <span className={`text-[10px] font-medium ${projectedOver ? 'text-rose-400' : 'text-gray-400'}`}>
+                                                            ~{fmt(projected)}{projectedOver ? ' ⚠' : ''}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                     </div>
                 )}
             </div>
