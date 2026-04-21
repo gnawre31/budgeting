@@ -19,6 +19,7 @@ export default function UploadPage() {
     const [conflicts, setConflicts] = useState([]);
     const [nonConflicts, setNonConflicts] = useState([]);
     const [selectedDuplicateIds, setSelectedDuplicateIds] = useState(new Set());
+    const [uploadPartnerId, setUploadPartnerId] = useState(null);
 
     useEffect(() => {
         const checkUser = async () => {
@@ -86,6 +87,7 @@ export default function UploadPage() {
             const { data: { user } } = await supabase.auth.getUser();
             const { data: profile } = await supabase.from("users").select("partner_id").eq("id", user.id).maybeSingle();
             const partnerId = profile?.partner_id ?? null;
+            setUploadPartnerId(partnerId);
 
             const counts = new Map();
             const internalSafe = [];
@@ -160,7 +162,10 @@ export default function UploadPage() {
     };
 
     const handleConfirmDuplicates = () => {
-        const selectedDupes = conflicts.filter(tx => selectedDuplicateIds.has(tx.id));
+        // Re-attach partner_id to selected dupes (stripped when building the conflicts list)
+        const selectedDupes = conflicts
+            .filter(tx => selectedDuplicateIds.has(tx.id))
+            .map(tx => ({ ...tx, partner_id: uploadPartnerId }));
         executeFinalUpload([...nonConflicts, ...selectedDupes]);
     };
 

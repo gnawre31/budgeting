@@ -197,8 +197,10 @@ export default function TransactionsPage() {
         setInsertError(null);
         try {
             const { data: { user } } = await supabase.auth.getUser();
+            const { data: profile } = await supabase.from("users").select("partner_id").eq("id", user.id).maybeSingle();
             const { error } = await supabase.from("transactions").insert({
                 user_id: user.id,
+                partner_id: profile?.partner_id ?? null,
                 date: insertForm.date,
                 merchant: insertForm.merchant.trim(),
                 merchant_normalized: insertForm.merchant.trim().toLowerCase(),
