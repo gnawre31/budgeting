@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { cacheGet, cacheSet, cacheKey, applyPartnerSplits } from "../lib/queryCache";
+import { cacheGet, cacheSet, cacheKey } from "../lib/queryCache";
 
 const fmt = (n) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
 const fmtPct = (n) => `${n >= 0 ? "" : "−"}${Math.abs(n).toFixed(1)}%`;
@@ -15,7 +15,7 @@ function KPICard({ label, value, sub, color = "text-gray-900" }) {
     );
 }
 
-export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], fixedCategories = [], splitRules = {}, refreshKey = 0 }) {
+export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], fixedCategories = [], refreshKey = 0 }) {
     const [rawExpenses, setRawExpenses] = useState([]);
     const [rawIncome, setRawIncome] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
@@ -63,7 +63,7 @@ export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = fal
     }, [selectedMonth, refreshKey]);
 
     const { totalSpend, totalIncome, net, rate } = useMemo(() => {
-        const filtered = applyPartnerSplits(rawExpenses, splitRules)
+        const filtered = rawExpenses
             .filter(d => !alwaysExcludedCategories.includes(d.category))
             .filter(d => !excludeSpecial || !specialCategories.includes(d.category));
 
@@ -81,7 +81,7 @@ export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = fal
         const net = totalIncome - totalSpend;
         const rate = totalIncome > 0 ? (net / totalIncome) * 100 : null;
         return { totalSpend, totalIncome, net, rate };
-    }, [rawExpenses, rawIncome, viewMode, currentUserId, alwaysExcludedCategories, excludeSpecial, specialCategories, splitRules]);
+    }, [rawExpenses, rawIncome, viewMode, currentUserId, alwaysExcludedCategories, excludeSpecial, specialCategories]);
 
     if (loading) {
         return (

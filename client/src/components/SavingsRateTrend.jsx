@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { cacheGet, cacheSet, cacheKey, applyPartnerSplits } from "../lib/queryCache";
+import { cacheGet, cacheSet, cacheKey } from "../lib/queryCache";
 
 const CONTAINER_H = 120; // px, same as SavingsTrend
 
@@ -12,7 +12,7 @@ function getLast6Months(endMonth) {
     });
 }
 
-export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], splitRules = {}, refreshKey = 0 }) {
+export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], refreshKey = 0 }) {
     const [rawExpenses, setRawExpenses] = useState([]);
     const [rawIncome, setRawIncome] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
@@ -64,9 +64,8 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
     }, [selectedMonth, refreshKey]);
 
     const rates = useMemo(() => {
-        const adjExpenses = applyPartnerSplits(rawExpenses, splitRules);
         return months.map(m => {
-            const monthExp = adjExpenses
+            const monthExp = rawExpenses
                 .filter(d => d.month === m)
                 .filter(d => !alwaysExcludedCategories.includes(d.category))
                 .filter(d => !excludeSpecial || !specialCategories.includes(d.category));
@@ -89,7 +88,7 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
 
             return { month: m, rate, hasData, label };
         });
-    }, [rawExpenses, rawIncome, months, viewMode, currentUserId, alwaysExcludedCategories, excludeSpecial, specialCategories, spanYears, splitRules]);
+    }, [rawExpenses, rawIncome, months, viewMode, currentUserId, alwaysExcludedCategories, excludeSpecial, specialCategories, spanYears]);
 
     const maxAbsRate = useMemo(() => Math.max(...rates.filter(r => r.rate !== null).map(r => Math.abs(r.rate)), 1), [rates]);
 
@@ -115,7 +114,7 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
             </div>
 
             <div className="px-6 py-5">
-                <div className="flex items-end gap-1" style={{ height: `${CONTAINER_H}px` }}>
+                <div className="flex items-end gap-2" style={{ height: `${CONTAINER_H}px` }}>
                     {rates.map(r => {
                         const isSelected = r.month === selectedMonth;
                         const hasRate = r.rate !== null && r.hasData;
@@ -134,16 +133,16 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
                         return (
                             <div key={r.month} className="flex-1 flex flex-col items-center justify-end gap-1.5 h-full">
                                 <span
-                                    className={`text-[10px] font-medium leading-none tabular-nums ${labelColor}`}
+                                    className={`text-[10px] font-semibold leading-none tabular-nums ${labelColor}`}
                                     style={!hasRate ? { visibility: "hidden" } : undefined}
                                 >
                                     {hasRate ? fmtRate(r.rate) : fmtRate(0)}
                                 </span>
                                 <div
-                                    className={`w-full rounded-t-md transition-all duration-700 ${barColor} ${isSelected ? "opacity-100 ring-2 ring-offset-1 ring-gray-300" : "opacity-60 hover:opacity-90"}`}
+                                    className={`w-full rounded-t-lg transition-all duration-700 ${barColor} ${isSelected ? "ring-2 ring-offset-1 ring-gray-300" : ""}`}
                                     style={{ height: hasRate ? `${barPct}%` : "3px" }}
                                 />
-                                <span className={`text-[10px] font-medium ${isSelected ? "text-gray-700" : "text-gray-400"}`}>{r.label}</span>
+                                <span className={`text-[10px] font-medium ${isSelected ? "text-gray-700 font-semibold" : "text-gray-400"}`}>{r.label}</span>
                             </div>
                         );
                     })}

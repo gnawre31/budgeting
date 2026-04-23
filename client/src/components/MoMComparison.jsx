@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { cacheGet, cacheSet, cacheKey, applyPartnerSplits } from "../lib/queryCache";
+import { cacheGet, cacheSet, cacheKey } from "../lib/queryCache";
 
 const fmt = (n) => `$${Math.round(n).toLocaleString()}`;
 
@@ -10,7 +10,7 @@ function prevMonthOf(m) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function MoMComparison({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], splitRules = {}, refreshKey = 0 }) {
+export default function MoMComparison({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], refreshKey = 0 }) {
     const prevMonth = useMemo(() => prevMonthOf(selectedMonth), [selectedMonth]);
 
     const [rawCurrent, setRawCurrent] = useState([]);
@@ -52,22 +52,20 @@ export default function MoMComparison({ selectedMonth, viewMode, excludeSpecial 
 
     const rows = useMemo(() => {
         const spendKey = viewMode === "household" ? "total_spent" : "self_spent";
-        const adjCurrent = applyPartnerSplits(rawCurrent, splitRules);
-        const adjPrev    = applyPartnerSplits(rawPrev, splitRules);
         const filter = (d) => !alwaysExcludedCategories.includes(d.category) && (!excludeSpecial || !specialCategories.includes(d.category));
 
         const cats = new Set([
-            ...adjCurrent.filter(filter).map(d => d.category),
-            ...adjPrev.filter(filter).map(d => d.category),
+            ...rawCurrent.filter(filter).map(d => d.category),
+            ...rawPrev.filter(filter).map(d => d.category),
         ]);
 
         return Array.from(cats).map(cat => {
-            const cur = adjCurrent.find(d => d.category === cat)?.[spendKey] || 0;
-            const prv = adjPrev.find(d => d.category === cat)?.[spendKey] || 0;
+            const cur = rawCurrent.find(d => d.category === cat)?.[spendKey] || 0;
+            const prv = rawPrev.find(d => d.category === cat)?.[spendKey] || 0;
             return { cat, cur, prv, delta: cur - prv };
         }).filter(r => r.cur > 0 || r.prv > 0)
           .sort((a, b) => b.cur - a.cur);
-    }, [rawCurrent, rawPrev, viewMode, alwaysExcludedCategories, excludeSpecial, specialCategories, splitRules]);
+    }, [rawCurrent, rawPrev, viewMode, alwaysExcludedCategories, excludeSpecial, specialCategories]);
 
     const maxVal = useMemo(() => Math.max(...rows.flatMap(r => [r.cur, r.prv]), 1), [rows]);
 

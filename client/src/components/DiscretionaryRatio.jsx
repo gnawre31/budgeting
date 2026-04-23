@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { cacheGet, cacheSet, cacheKey, applyPartnerSplits } from "../lib/queryCache";
+import { cacheGet, cacheSet, cacheKey } from "../lib/queryCache";
 
 const fmt = (n) => new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 0 }).format(n);
 
-export default function DiscretionaryRatio({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], fixedCategories = [], splitRules = {}, refreshKey = 0 }) {
+export default function DiscretionaryRatio({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], fixedCategories = [], refreshKey = 0 }) {
     const [rawExpenses, setRawExpenses] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -29,14 +29,14 @@ export default function DiscretionaryRatio({ selectedMonth, viewMode, excludeSpe
 
     const { fixed, variable, total } = useMemo(() => {
         const spendKey = viewMode === "household" ? "total_spent" : "self_spent";
-        const filtered = applyPartnerSplits(rawExpenses, splitRules)
+        const filtered = rawExpenses
             .filter(d => !alwaysExcludedCategories.includes(d.category))
             .filter(d => !excludeSpecial || !specialCategories.includes(d.category));
 
         const fixed = filtered.filter(d => fixedCategories.includes(d.category)).reduce((s, d) => s + (d[spendKey] || 0), 0);
         const variable = filtered.filter(d => !fixedCategories.includes(d.category)).reduce((s, d) => s + (d[spendKey] || 0), 0);
         return { fixed, variable, total: fixed + variable };
-    }, [rawExpenses, viewMode, alwaysExcludedCategories, excludeSpecial, specialCategories, fixedCategories, splitRules]);
+    }, [rawExpenses, viewMode, alwaysExcludedCategories, excludeSpecial, specialCategories, fixedCategories]);
 
     const fixedPct = total > 0 ? (fixed / total) * 100 : 0;
     const varPct = total > 0 ? (variable / total) * 100 : 0;

@@ -148,6 +148,8 @@ export default function TransactionsPage() {
         if (!window.confirm("Permanently delete this transaction?")) return;
         setLoading(true);
         try {
+            // Delete any partner-credit children first, then the parent
+            await supabase.from("transactions").delete().eq("parent_id", id).eq("is_partner_credit", true);
             const { error } = await supabase.from("transactions").delete().eq("id", id);
             if (error) throw error;
             await fetchTransactions();
@@ -166,6 +168,8 @@ export default function TransactionsPage() {
         if (deletableIds.length === 0) return;
         setLoading(true);
         try {
+            // Delete any partner-credit children first, then the parents
+            await supabase.from("transactions").delete().in("parent_id", deletableIds).eq("is_partner_credit", true);
             const { error } = await supabase.from("transactions").delete().in("id", deletableIds);
             if (error) throw error;
             await fetchTransactions();
@@ -187,8 +191,8 @@ export default function TransactionsPage() {
     const handleInsertSubmit = async () => {
         if (!insertForm.merchant.trim() || !insertForm.amount) return;
         const amount = Math.abs(parseFloat(insertForm.amount));
-        const selfAmt = parseFloat(insertForm.self_amount) || amount;
-        const partnerAmt = parseFloat(insertForm.partner_amount) || 0;
+        const selfAmt = insertForm.self_amount !== "" ? parseFloat(insertForm.self_amount) : amount;
+        const partnerAmt = insertForm.partner_amount !== "" ? parseFloat(insertForm.partner_amount) : 0;
         if (Math.abs(selfAmt + partnerAmt - amount) > 0.01) {
             setInsertError(`Self (${selfAmt.toFixed(2)}) + Partner (${partnerAmt.toFixed(2)}) must equal Total (${amount.toFixed(2)})`);
             return;

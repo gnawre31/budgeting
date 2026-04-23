@@ -3,7 +3,7 @@ import { supabase } from "../lib/supabaseClient";
 import { cacheGet, cacheSet, cacheKey } from "../lib/queryCache";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const CHART_H = 140;
+const CHART_H = 160;
 const MAX_BAR = 108;
 const fmt = (n) => `$${Math.round(n).toLocaleString()}`;
 
@@ -100,15 +100,16 @@ export default function DayHeatmap({ selectedMonth, viewMode, excludeSpecial = f
                         return (
                             <div
                                 key={d.label}
-                                className="flex-1 flex flex-col items-center justify-end h-full gap-1 relative group cursor-default"
+                                className="flex-1 flex flex-col items-center justify-end h-full gap-1.5 relative cursor-default"
                                 onMouseEnter={() => setHovered(i)}
                                 onMouseLeave={() => setHovered(null)}
                             >
-                                {isHov && d.avg > 0 && (
-                                    <div className="absolute bottom-full mb-2 bg-gray-900 text-white text-[11px] font-medium px-2 py-1 rounded-lg whitespace-nowrap z-10">
-                                        {fmt(d.avg)}/day
-                                    </div>
-                                )}
+                                <span
+                                    className={`text-[10px] font-semibold leading-none tabular-nums ${isPeak ? "text-indigo-500" : "text-gray-400"}`}
+                                    style={d.avg === 0 ? { visibility: "hidden" } : undefined}
+                                >
+                                    {fmt(d.avg)}
+                                </span>
                                 <div
                                     className="w-full rounded-t-lg transition-all duration-300"
                                     style={{ height: `${barH}px`, background: color }}

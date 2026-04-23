@@ -34,6 +34,16 @@ export default function RuleManager() {
     const handleAddRule = async (e) => {
         e.preventDefault();
         if (!newRule.keyword || !newRule.category) return;
+
+        const isDuplicate = rules.some(
+            r => r.keyword.toLowerCase().trim() === newRule.keyword.toLowerCase().trim()
+              && r.transaction_type === newRule.transaction_type
+        );
+        if (isDuplicate) {
+            setError(`A rule for "${newRule.keyword}" (${newRule.transaction_type}) already exists.`);
+            return;
+        }
+
         setLoading(true);
         setError(null);
         try {

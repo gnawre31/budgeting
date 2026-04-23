@@ -26,36 +26,13 @@ function Toggle({ checked, onChange, disabled }) {
     );
 }
 
-function CategoryRow({ cat, onUpdate, onUpdateSplitRule, onRemove, deletingId }) {
+function CategoryRow({ cat, onUpdate, onRemove, deletingId }) {
     const isDeleting = deletingId === cat.id;
-    const [splitInput, setSplitInput] = React.useState(
-        cat.monthly_partner_contribution > 0 ? String(cat.monthly_partner_contribution) : ""
-    );
-
-    const handleSplitBlur = () => {
-        const val = parseFloat(splitInput) || 0;
-        const prev = cat.monthly_partner_contribution || 0;
-        if (val !== prev) onUpdateSplitRule(cat.id, val);
-        setSplitInput(val > 0 ? String(val) : "");
-    };
 
     return (
         <li className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50/60 transition-colors group">
             {/* Name */}
             <span className="flex-1 text-sm font-medium text-gray-800">{cat.name}</span>
-
-            {/* Partner $/mo — expense categories only */}
-            {cat.type === "expense" && (
-                <div className="w-[110px] flex justify-center shrink-0">
-                    <input
-                        type="number" min="0" step="1"
-                        value={splitInput} placeholder="—"
-                        onChange={e => setSplitInput(e.target.value)}
-                        onBlur={handleSplitBlur}
-                        className="w-20 bg-gray-100 rounded-lg px-2 py-1 text-xs text-gray-700 text-right outline-none border border-transparent focus:bg-white focus:border-gray-300 transition-all"
-                    />
-                </div>
-            )}
 
             {/* Fixed toggle */}
             {cat.type === "expense" && (
@@ -103,7 +80,7 @@ function CategoryRow({ cat, onUpdate, onUpdateSplitRule, onRemove, deletingId })
 }
 
 export default function CategoriesPage() {
-    const { categories, loading, dbAvailable, addCategory, updateCategory, updateSplitRule, removeCategory } = useCategories();
+    const { categories, loading, dbAvailable, addCategory, updateCategory, removeCategory } = useCategories();
 
     const [activeTab, setActiveTab]   = useState("expense");
     const [newName, setNewName]       = useState("");
@@ -122,13 +99,20 @@ export default function CategoriesPage() {
         e.preventDefault();
         const name = newName.trim();
         if (!name) return;
-        const exists = categories.some(c => c.type === activeTab && c.name.toLowerCase() === name.toLowerCase());
-        if (exists) { setError("That category already exists."); return; }
+        const conflict = categories.find(c => c.type === activeTab && c.name.toLowerCase() === name.toLowerCase());
+        if (conflict) { setError(`"${conflict.name}" already exists. Category names must be unique (case-insensitive).`); return; }
         setAdding(true); setError(null);
         try {
             await addCategory(name, activeTab, { is_fixed: newFixed, is_special: newSpecial, is_always_excluded: newAlwaysEx });
             setNewName(""); setNewFixed(false); setNewSpecial(false); setNewAlwaysEx(false);
-        } catch (err) { setError(err.message); }
+        } catch (err) {
+            const msg = err.message || "";
+            if (msg.includes("unique") || msg.includes("duplicate") || msg.includes("23505")) {
+                setError(`"${name}" already exists (case-insensitive). Please choose a different name.`);
+            } else {
+                setError(msg);
+            }
+        }
         finally { setAdding(false); }
     };
 
@@ -229,9 +213,6 @@ export default function CategoriesPage() {
                 <div className="flex items-center gap-4 px-6 py-2 bg-gray-50 border-b border-gray-100">
                     <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Category</span>
                     {activeTab === "expense" && (
-                        <span className="w-[110px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Partner $/mo</span>
-                    )}
-                    {activeTab === "expense" && (
                         <span className="w-[56px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Fixed</span>
                     )}
                     <span className="w-[72px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Special</span>
@@ -261,10 +242,6 @@ export default function CategoriesPage() {
                                 key={cat.id}
                                 cat={cat}
                                 onUpdate={handleUpdate}
-                                onUpdateSplitRule={async (id, amount) => {
-                                    try { await updateSplitRule(id, amount); }
-                                    catch (err) { setMutateError(err.message); }
-                                }}
                                 onRemove={handleRemove}
                                 deletingId={deletingId}
                             />
@@ -274,7 +251,6 @@ export default function CategoriesPage() {
 
                 <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
                     <p className="text-xs text-gray-400">
-                        <span className="font-medium text-gray-500">Partner $/mo</span> sets a fixed monthly contribution from your partner — subtracted from your share in "Just Me" view automatically.{" "}
                         <span className="font-medium text-gray-500">Fixed</span> marks recurring fixed expenses (rent, subscriptions) for the Fixed vs Variable breakdown.{" "}
                         <span className="font-medium text-gray-500">Special</span> categories are filterable on the dashboard.{" "}
                         <span className="font-medium text-gray-500">Always exclude</span> hides transactions from all reports.

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { cacheGet, cacheSet, cacheKey, applyPartnerSplits } from "../lib/queryCache";
+import { cacheGet, cacheSet, cacheKey } from "../lib/queryCache";
 
 const COLORS = ["#6366f1", "#14b8a6", "#f43f5e", "#f59e0b", "#a78bfa", "#34d399", "#fb923c", "#60a5fa", "#e879f9", "#4ade80"];
 const CX = 80, CY = 80, OUTER = 68, INNER = 42;
@@ -43,7 +43,7 @@ function buildSlices(data, total) {
     });
 }
 
-export default function SpendingDonut({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], splitRules = {}, refreshKey = 0 }) {
+export default function SpendingDonut({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], refreshKey = 0 }) {
     const [rawExpenses, setRawExpenses] = useState([]);
     const [loading, setLoading] = useState(true);
     const [hovered, setHovered] = useState(null);
@@ -69,7 +69,7 @@ export default function SpendingDonut({ selectedMonth, viewMode, excludeSpecial 
 
     const slices = useMemo(() => {
         const spendKey = viewMode === "household" ? "total_spent" : "self_spent";
-        const filtered = applyPartnerSplits(rawExpenses, splitRules)
+        const filtered = rawExpenses
             .filter(d => !alwaysExcludedCategories.includes(d.category))
             .filter(d => !excludeSpecial || !specialCategories.includes(d.category))
             .map(d => ({ label: d.category, value: d[spendKey] || 0 }))
@@ -79,7 +79,7 @@ export default function SpendingDonut({ selectedMonth, viewMode, excludeSpecial 
         const total = filtered.reduce((s, d) => s + d.value, 0);
         if (total === 0) return { slices: [], total: 0 };
         return { slices: buildSlices(filtered, total), total };
-    }, [rawExpenses, viewMode, alwaysExcludedCategories, excludeSpecial, specialCategories, splitRules]);
+    }, [rawExpenses, viewMode, alwaysExcludedCategories, excludeSpecial, specialCategories]);
 
     const centerLabel = hovered
         ? { top: hovered.label, bottom: fmt(hovered.value) }
