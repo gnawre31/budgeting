@@ -191,7 +191,7 @@ export default function UploadPage() {
     }, {});
 
     return (
-        <div className="max-w-[98%] mx-auto mt-6 mb-10 px-4 md:px-6 space-y-6">
+        <div className="max-w-6xl mx-auto mt-6 mb-10 px-4 md:px-6 space-y-6">
 
             {/* Page Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

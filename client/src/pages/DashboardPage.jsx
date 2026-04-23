@@ -1,49 +1,70 @@
-import React, { useState, useMemo } from "react";
-import CategoryPacing from "../components/CategoryPacing";
-import TopMerchants from "../components/TopMerchants";
-import SavingsTrend from "../components/SavingsTrend";
-import ReimbursementBalance from "../components/ReimbursementBalance";
-import CashFlowChart from "../components/CashFlowChart";
+import React, { useState, useMemo, useEffect } from "react";
 import { useCategories } from "../hooks/useCategories";
+import KPIStrip from "../components/KPIStrip";
+import MoMComparison from "../components/MoMComparison";
+import SpendingDonut from "../components/SpendingDonut";
+import DailyCurveWidget from "../components/DailyCurveWidget";
+import SavingsRateTrend from "../components/SavingsRateTrend";
+import DiscretionaryRatio from "../components/DiscretionaryRatio";
+import DayHeatmap from "../components/DayHeatmap";
+import ReimbursementWidget from "../components/ReimbursementWidget";
+import LargestTransactions from "../components/LargestTransactions";
 
 export default function DashboardPage() {
     const [selectedMonth, setSelectedMonth] = useState(() => {
         const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     });
     const [viewMode, setViewMode] = useState("household");
     const [excludeSpecial, setExcludeSpecial] = useState(false);
+    const [refreshKey, setRefreshKey] = useState(0);
 
-    const { specialCategories, alwaysExcludedCategories } = useCategories();
+    const { specialCategories, alwaysExcludedCategories, fixedCategories, splitRules } = useCategories();
+
+    // Re-fetch widgets whenever Realtime invalidates the cache
+    useEffect(() => {
+        const handler = () => setRefreshKey(k => k + 1);
+        window.addEventListener("bsync:data-changed", handler);
+        return () => window.removeEventListener("bsync:data-changed", handler);
+    }, []);
 
     const handlePrevMonth = () => {
-        const [year, month] = selectedMonth.split('-');
+        const [year, month] = selectedMonth.split("-");
         const d = new Date(parseInt(year), parseInt(month) - 2, 1);
-        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+        setSelectedMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
     };
 
     const handleNextMonth = () => {
-        const [year, month] = selectedMonth.split('-');
+        const [year, month] = selectedMonth.split("-");
         const d = new Date(parseInt(year), parseInt(month), 1);
-        const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const next = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
         const now = new Date();
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
         if (next <= currentMonth) setSelectedMonth(next);
     };
 
     const isCurrentMonth = (() => {
         const now = new Date();
-        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
         return selectedMonth >= currentMonth;
     })();
 
     const displayMonthName = useMemo(() => {
-        const [year, month] = selectedMonth.split('-');
-        return new Date(parseInt(year), parseInt(month) - 1, 1)
-            .toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        const [year, month] = selectedMonth.split("-");
+        return new Date(parseInt(year), parseInt(month) - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
     }, [selectedMonth]);
 
     const hasSpecialCategories = specialCategories.length > 0;
+
+    const sharedProps = {
+        selectedMonth,
+        viewMode,
+        excludeSpecial,
+        specialCategories,
+        alwaysExcludedCategories,
+        splitRules,
+        refreshKey,
+    };
 
     return (
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-16">
@@ -83,22 +104,14 @@ export default function DashboardPage() {
                     {/* View toggle */}
                     <div className="flex bg-gray-100 p-0.5 rounded-xl">
                         <button
-                            onClick={() => setViewMode('household')}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${
-                                viewMode === 'household'
-                                    ? 'bg-white text-gray-900 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
-                            }`}
+                            onClick={() => setViewMode("household")}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${viewMode === "household" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                         >
                             Household
                         </button>
                         <button
-                            onClick={() => setViewMode('self')}
-                            className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${
-                                viewMode === 'self'
-                                    ? 'bg-white text-blue-500 shadow-sm'
-                                    : 'text-gray-500 hover:text-gray-700'
-                            }`}
+                            onClick={() => setViewMode("self")}
+                            className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${viewMode === "self" ? "bg-white text-blue-500 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                         >
                             Just Me
                         </button>
@@ -106,15 +119,13 @@ export default function DashboardPage() {
 
                     {/* Month navigator */}
                     <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-xl">
-                        <button onClick={handlePrevMonth}
-                            className="p-1.5 hover:bg-white rounded-lg transition-all text-gray-500 hover:text-gray-900 hover:shadow-sm">
+                        <button onClick={handlePrevMonth} className="p-1.5 hover:bg-white rounded-lg transition-all text-gray-500 hover:text-gray-900 hover:shadow-sm">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                             </svg>
                         </button>
                         <span className="text-sm font-medium text-gray-700 w-28 text-center">{displayMonthName}</span>
-                        <button onClick={handleNextMonth} disabled={isCurrentMonth}
-                            className="p-1.5 hover:bg-white rounded-lg transition-all text-gray-500 hover:text-gray-900 hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:shadow-none">
+                        <button onClick={handleNextMonth} disabled={isCurrentMonth} className="p-1.5 hover:bg-white rounded-lg transition-all text-gray-500 hover:text-gray-900 hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:shadow-none">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                             </svg>
@@ -136,42 +147,32 @@ export default function DashboardPage() {
 
             {/* Widget grid */}
             <div className="space-y-4">
-                <CategoryPacing
-                    selectedMonth={selectedMonth}
-                    viewMode={viewMode}
-                    excludeSpecial={excludeSpecial}
-                    specialCategories={specialCategories}
-                    alwaysExcludedCategories={alwaysExcludedCategories}
-                />
+                {/* Row 1: KPI strip */}
+                <KPIStrip {...sharedProps} fixedCategories={fixedCategories} />
 
-                <CashFlowChart
-                    selectedMonth={selectedMonth}
-                    viewMode={viewMode}
-                    excludeSpecial={excludeSpecial}
-                    specialCategories={specialCategories}
-                    alwaysExcludedCategories={alwaysExcludedCategories}
-                />
+                {/* Row 2: MoM */}
+                <MoMComparison {...sharedProps} />
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
-                    <div className="lg:col-span-2 h-full">
-                        <SavingsTrend
-                            selectedMonth={selectedMonth}
-                            viewMode={viewMode}
-                            excludeSpecial={excludeSpecial}
-                            specialCategories={specialCategories}
-                            alwaysExcludedCategories={alwaysExcludedCategories}
-                        />
-                    </div>
-                    <ReimbursementBalance />
+                {/* Row 3: Daily curve */}
+                <DailyCurveWidget {...sharedProps} fixedCategories={fixedCategories} />
+
+                {/* Row 4: Donut + Savings rate */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+                    <SpendingDonut {...sharedProps} />
+                    <SavingsRateTrend {...sharedProps} />
                 </div>
 
-                <TopMerchants
-                    selectedMonth={selectedMonth}
-                    viewMode={viewMode}
-                    excludeSpecial={excludeSpecial}
-                    specialCategories={specialCategories}
-                    alwaysExcludedCategories={alwaysExcludedCategories}
-                />
+                {/* Row 5: Discretionary + Heatmap */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+                    <DiscretionaryRatio {...sharedProps} fixedCategories={fixedCategories} />
+                    <DayHeatmap {...sharedProps} />
+                </div>
+
+                {/* Row 6: Reimbursements + Largest transactions */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+                    <ReimbursementWidget />
+                    <LargestTransactions {...sharedProps} />
+                </div>
             </div>
         </div>
     );

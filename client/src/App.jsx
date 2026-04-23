@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Routes, Route, NavLink } from "react-router-dom";
 import { supabase } from "./lib/supabaseClient";
+import { useCacheInvalidation } from "./hooks/useCacheInvalidation";
 import UploadPage from "./pages/UploadPage";
 import ReconciliationView from "./pages/ReconciliationView";
 import TransactionsPage from "./pages/TransactionsPage";
@@ -12,6 +13,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [displayName, setDisplayName] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  useCacheInvalidation(user?.id ?? null);
 
   const fetchDisplayName = async (uid) => {
     const { data } = await supabase.from("users").select("display_name").eq("id", uid).single();

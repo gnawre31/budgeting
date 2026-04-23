@@ -1,18 +1,28 @@
 import React, { useState, useEffect } from "react";
 import { getCategorizationRules, createCategorizationRule, deleteCategorizationRule } from "../services/transactionService";
+import { useCategories } from "../hooks/useCategories";
 
 export default function RuleManager() {
+    const { expenseCategories, incomeCategories } = useCategories();
+
     const [rules, setRules] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [newRule, setNewRule] = useState({
         keyword: "",
         transaction_type: "Expense",
-        category: "Groceries",
+        category: "",
         rename_to: ""
     });
 
+    // Reset category when type changes
+    useEffect(() => {
+        setNewRule(r => ({ ...r, category: "" }));
+    }, [newRule.transaction_type]);
+
     useEffect(() => { loadRules(); }, []);
+
+    const categoryOptions = newRule.transaction_type === "Income" ? incomeCategories : expenseCategories;
 
     const loadRules = async () => {
         try {
@@ -23,12 +33,12 @@ export default function RuleManager() {
 
     const handleAddRule = async (e) => {
         e.preventDefault();
-        if (!newRule.keyword) return;
+        if (!newRule.keyword || !newRule.category) return;
         setLoading(true);
         setError(null);
         try {
             await createCategorizationRule(newRule);
-            setNewRule({ keyword: "", transaction_type: "Expense", category: "Groceries", rename_to: "" });
+            setNewRule({ keyword: "", transaction_type: "Expense", category: "", rename_to: "" });
             await loadRules();
         } catch (err) { setError(err.message || "Failed to add rule."); }
         finally { setLoading(false); }
@@ -81,20 +91,17 @@ export default function RuleManager() {
                         value={newRule.category}
                         onChange={(e) => setNewRule({ ...newRule, category: e.target.value })}
                     >
-                        <option value="Groceries">Groceries</option>
-                        <option value="Restaurant">Restaurant</option>
-                        <option value="Transportation">Transportation</option>
-                        <option value="Bill Payment">Bill Payment</option>
-                        <option value="Rent">Rent</option>
-                        <option value="Entertainment">Entertainment</option>
-                        <option value="Salary">Salary</option>
+                        <option value="">Choose category…</option>
+                        {categoryOptions.map(c => (
+                            <option key={c} value={c}>{c}</option>
+                        ))}
                     </select>
                 </div>
                 <div className="flex items-end">
                     <button
                         type="submit"
-                        disabled={loading}
-                        className="w-full bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium px-5 py-2.5 rounded-full transition-colors disabled:opacity-40"
+                        disabled={loading || !newRule.keyword || !newRule.category}
+                        className="w-full bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium px-5 py-2.5 rounded-xl transition-colors disabled:opacity-40"
                     >
                         {loading ? "Adding…" : "Add Rule"}
                     </button>
@@ -113,14 +120,17 @@ export default function RuleManager() {
                                 {rule.transaction_type}
                             </span>
                             <p className="text-sm text-gray-900">
-                                If <span className="font-semibold text-blue-500">"{rule.keyword}"</span>
+                                If <span className="font-semibold text-indigo-500">"{rule.keyword}"</span>
                                 <span className="text-gray-400 mx-1.5">→</span>
                                 <span className="font-semibold text-gray-900">{rule.category}</span>
+                                {rule.rename_to && (
+                                    <span className="text-gray-400 ml-1.5">· rename to <span className="font-semibold text-gray-700">"{rule.rename_to}"</span></span>
+                                )}
                             </p>
                         </div>
                         <button
                             onClick={() => handleDelete(rule.id)}
-                            className="text-sm font-medium text-rose-500 hover:text-rose-700 opacity-0 group-hover:opacity-100 transition-all px-2"
+                            className="text-sm font-medium text-rose-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all px-2"
                         >
                             Remove
                         </button>

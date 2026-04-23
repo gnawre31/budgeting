@@ -99,11 +99,14 @@ export default function TransactionTable() {
                         const isMandatoryExclude = alwaysExcludedCategories.includes(tx.category);
                         const notesOpen = expandedNotes.has(tx.id);
                         const hasNotes = tx.description && tx.description.trim().length > 0;
-                        const isExcluded = tx.exclude_from_report || false;
+                        const isExcluded = tx.exclude_from_report || isMandatoryExclude;
 
                         return (
                             <React.Fragment key={tx.id}>
-                                <tr className={`border-b ${notesOpen ? 'border-gray-50' : 'border-gray-100'} hover:bg-gray-50/60 transition-colors ${isExcluded ? 'opacity-50' : ''}`}>
+                                <tr
+                                    className={`border-b ${notesOpen ? 'border-gray-50' : 'border-gray-100'} hover:bg-gray-50/60 transition-colors`}
+                                    style={isExcluded ? { opacity: 0.4 } : undefined}
+                                >
                                     {/* Date */}
                                     <td className="px-4 py-2.5">
                                         <input
@@ -258,7 +261,7 @@ export default function TransactionTable() {
 
                                 {/* Expandable notes row */}
                                 {notesOpen && (
-                                    <tr className="border-b border-gray-100 bg-blue-50/30">
+                                    <tr className="border-b border-gray-100 bg-blue-50/30" style={isExcluded ? { opacity: 0.4 } : undefined}>
                                         <td />
                                         <td colSpan={7} className="px-4 pb-2.5 pt-1">
                                             <div className="flex items-center gap-2">

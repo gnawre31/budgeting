@@ -26,73 +26,88 @@ function Toggle({ checked, onChange, disabled }) {
     );
 }
 
-function CategoryRow({ cat, onUpdate, onRemove, deletingId }) {
+function CategoryRow({ cat, onUpdate, onUpdateSplitRule, onRemove, deletingId }) {
     const isDeleting = deletingId === cat.id;
+    const [splitInput, setSplitInput] = React.useState(
+        cat.monthly_partner_contribution > 0 ? String(cat.monthly_partner_contribution) : ""
+    );
+
+    const handleSplitBlur = () => {
+        const val = parseFloat(splitInput) || 0;
+        const prev = cat.monthly_partner_contribution || 0;
+        if (val !== prev) onUpdateSplitRule(cat.id, val);
+        setSplitInput(val > 0 ? String(val) : "");
+    };
 
     return (
         <li className="flex items-center gap-4 px-6 py-3 hover:bg-gray-50/60 transition-colors group">
             {/* Name */}
-            <span className="flex-1 text-sm font-medium text-gray-800 flex items-center gap-2">
-                {cat.name}
-                {cat.is_system && (
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-md">
-                        System
-                    </span>
-                )}
-            </span>
+            <span className="flex-1 text-sm font-medium text-gray-800">{cat.name}</span>
+
+            {/* Partner $/mo — expense categories only */}
+            {cat.type === "expense" && (
+                <div className="w-[110px] flex justify-center shrink-0">
+                    <input
+                        type="number" min="0" step="1"
+                        value={splitInput} placeholder="—"
+                        onChange={e => setSplitInput(e.target.value)}
+                        onBlur={handleSplitBlur}
+                        className="w-20 bg-gray-100 rounded-lg px-2 py-1 text-xs text-gray-700 text-right outline-none border border-transparent focus:bg-white focus:border-gray-300 transition-all"
+                    />
+                </div>
+            )}
+
+            {/* Fixed toggle */}
+            {cat.type === "expense" && (
+                <div className="w-[56px] flex justify-center shrink-0">
+                    <Toggle
+                        checked={!!cat.is_fixed}
+                        onChange={val => onUpdate(cat.id, { is_fixed: val })}
+                    />
+                </div>
+            )}
 
             {/* Special toggle */}
-            <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[11px] text-gray-400 hidden sm:block">Special</span>
+            <div className="w-[72px] flex justify-center shrink-0">
                 <Toggle
                     checked={!!cat.is_special}
-                    disabled={cat.is_system}
                     onChange={val => onUpdate(cat.id, { is_special: val })}
                 />
             </div>
 
             {/* Always exclude toggle */}
-            <div className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[11px] text-gray-400 hidden sm:block">Always exclude</span>
+            <div className="w-[100px] flex justify-center shrink-0">
                 <Toggle
                     checked={!!cat.is_always_excluded}
-                    disabled={cat.is_system}
                     onChange={val => onUpdate(cat.id, { is_always_excluded: val })}
                 />
             </div>
 
             {/* Delete */}
-            {cat.is_system ? (
-                <span className="w-7 flex items-center justify-center text-gray-300" title="System categories cannot be removed">
+            <button
+                onClick={() => onRemove(cat)}
+                disabled={isDeleting}
+                title="Remove category"
+                className="w-7 flex items-center justify-center opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all disabled:opacity-30"
+            >
+                {isDeleting ? (
+                    <div className="w-4 h-4 border-2 border-gray-200 border-t-rose-400 rounded-full animate-spin" />
+                ) : (
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25-2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
                     </svg>
-                </span>
-            ) : (
-                <button
-                    onClick={() => onRemove(cat)}
-                    disabled={isDeleting}
-                    title="Remove category"
-                    className="w-7 flex items-center justify-center opacity-0 group-hover:opacity-100 p-1 text-gray-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all disabled:opacity-30"
-                >
-                    {isDeleting ? (
-                        <div className="w-4 h-4 border-2 border-gray-200 border-t-rose-400 rounded-full animate-spin" />
-                    ) : (
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-4 h-4">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                    )}
-                </button>
-            )}
+                )}
+            </button>
         </li>
     );
 }
 
 export default function CategoriesPage() {
-    const { categories, loading, dbAvailable, addCategory, updateCategory, removeCategory } = useCategories();
+    const { categories, loading, dbAvailable, addCategory, updateCategory, updateSplitRule, removeCategory } = useCategories();
 
     const [activeTab, setActiveTab]   = useState("expense");
     const [newName, setNewName]       = useState("");
+    const [newFixed, setNewFixed]     = useState(false);
     const [newSpecial, setNewSpecial] = useState(false);
     const [newAlwaysEx, setNewAlwaysEx] = useState(false);
     const [adding, setAdding]         = useState(false);
@@ -101,7 +116,7 @@ export default function CategoriesPage() {
     const [deletingId, setDeletingId] = useState(null);
 
     const visible = categories.filter(c => c.type === activeTab);
-    const sorted  = [...visible.filter(c => !c.is_system), ...visible.filter(c => c.is_system)];
+    const sorted  = [...visible].sort((a, b) => a.name.localeCompare(b.name));
 
     const handleAdd = async (e) => {
         e.preventDefault();
@@ -111,8 +126,8 @@ export default function CategoriesPage() {
         if (exists) { setError("That category already exists."); return; }
         setAdding(true); setError(null);
         try {
-            await addCategory(name, activeTab, { is_special: newSpecial, is_always_excluded: newAlwaysEx });
-            setNewName(""); setNewSpecial(false); setNewAlwaysEx(false);
+            await addCategory(name, activeTab, { is_fixed: newFixed, is_special: newSpecial, is_always_excluded: newAlwaysEx });
+            setNewName(""); setNewFixed(false); setNewSpecial(false); setNewAlwaysEx(false);
         } catch (err) { setError(err.message); }
         finally { setAdding(false); }
     };
@@ -191,7 +206,13 @@ export default function CategoriesPage() {
                         </button>
                     </div>
                     {/* Flags for new category */}
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-6 flex-wrap">
+                        {activeTab === "expense" && (
+                            <label className="flex items-center gap-2 cursor-pointer select-none">
+                                <Toggle checked={newFixed} onChange={setNewFixed} disabled={!dbAvailable} />
+                                <span className="text-xs text-gray-500">Fixed expense</span>
+                            </label>
+                        )}
                         <label className="flex items-center gap-2 cursor-pointer select-none">
                             <Toggle checked={newSpecial} onChange={setNewSpecial} disabled={!dbAvailable} />
                             <span className="text-xs text-gray-500">Special / one-time</span>
@@ -207,8 +228,14 @@ export default function CategoriesPage() {
                 {/* Column headers */}
                 <div className="flex items-center gap-4 px-6 py-2 bg-gray-50 border-b border-gray-100">
                     <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">Category</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 hidden sm:block w-[72px] text-center">Special</span>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 hidden sm:block w-[100px] text-center">Always Exclude</span>
+                    {activeTab === "expense" && (
+                        <span className="w-[110px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Partner $/mo</span>
+                    )}
+                    {activeTab === "expense" && (
+                        <span className="w-[56px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Fixed</span>
+                    )}
+                    <span className="w-[72px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Special</span>
+                    <span className="w-[100px] text-[10px] font-semibold uppercase tracking-wider text-gray-400 text-center">Always Exclude</span>
                     <span className="w-7" />
                 </div>
 
@@ -234,6 +261,10 @@ export default function CategoriesPage() {
                                 key={cat.id}
                                 cat={cat}
                                 onUpdate={handleUpdate}
+                                onUpdateSplitRule={async (id, amount) => {
+                                    try { await updateSplitRule(id, amount); }
+                                    catch (err) { setMutateError(err.message); }
+                                }}
                                 onRemove={handleRemove}
                                 deletingId={deletingId}
                             />
@@ -243,10 +274,10 @@ export default function CategoriesPage() {
 
                 <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50">
                     <p className="text-xs text-gray-400">
+                        <span className="font-medium text-gray-500">Partner $/mo</span> sets a fixed monthly contribution from your partner — subtracted from your share in "Just Me" view automatically.{" "}
+                        <span className="font-medium text-gray-500">Fixed</span> marks recurring fixed expenses (rent, subscriptions) for the Fixed vs Variable breakdown.{" "}
                         <span className="font-medium text-gray-500">Special</span> categories are filterable on the dashboard.{" "}
-                        <span className="font-medium text-gray-500">Always exclude</span> hides transactions from all reports.{" "}
-                        <span className="font-medium text-gray-500">System</span> categories are locked.
-                        Changes sync to your partner automatically.
+                        <span className="font-medium text-gray-500">Always exclude</span> hides transactions from all reports.
                     </p>
                 </div>
             </div>

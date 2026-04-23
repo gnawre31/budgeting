@@ -68,6 +68,12 @@ export function useCategories() {
     const incomeCategories         = useMemo(() => categories.filter(c => c.type === "income").map(c => c.name),  [categories]);
     const specialCategories        = useMemo(() => categories.filter(c => c.is_special).map(c => c.name),         [categories]);
     const alwaysExcludedCategories = useMemo(() => categories.filter(c => c.is_always_excluded).map(c => c.name), [categories]);
+    const fixedCategories          = useMemo(() => categories.filter(c => c.is_fixed).map(c => c.name),           [categories]);
+    const splitRules               = useMemo(() => {
+        const rules = {};
+        categories.forEach(c => { if (c.monthly_partner_contribution > 0) rules[c.name] = c.monthly_partner_contribution; });
+        return rules;
+    }, [categories]);
 
     // ── Partner sync helper ──────────────────────────────────────────────────
     const syncPartner = useCallback(async (name, type, updates) => {
@@ -106,6 +112,12 @@ export function useCategories() {
         setCategories(prev => prev.map(c => c.id === id ? updated : c));
     }, [categories, dbAvailable, syncPartner]);
 
+    const updateSplitRule = useCallback(async (id, amount) => {
+        if (!dbAvailable) return;
+        const updated = await svcUpdate(id, { monthly_partner_contribution: amount });
+        setCategories(prev => prev.map(c => c.id === id ? updated : c));
+    }, [dbAvailable]);
+
     const removeCategory = useCallback(async (id) => {
         if (!dbAvailable) return;
         const cat = categories.find(c => c.id === id);
@@ -130,10 +142,13 @@ export function useCategories() {
         incomeCategories,
         specialCategories,
         alwaysExcludedCategories,
+        fixedCategories,
+        splitRules,
         loading,
         dbAvailable,
         addCategory,
         updateCategory,
+        updateSplitRule,
         removeCategory,
         refresh: load,
     };

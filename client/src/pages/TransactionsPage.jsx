@@ -126,7 +126,7 @@ export default function TransactionsPage() {
         return next;
     });
     const toggleSelectAll = () => setSelectedIds(
-        selectedIds.size === transactions.length ? new Set() : new Set(transactions.map(t => t.id))
+        allSelected ? new Set() : new Set(selectableTransactions.map(t => t.id))
     );
     const handleBulkRecategorize = () => {
         if (!bulkCategory) return;
@@ -272,8 +272,9 @@ export default function TransactionsPage() {
         } finally { setLoading(false); }
     };
 
-    const allSelected = transactions.length > 0 && selectedIds.size === transactions.length;
-    const someSelected = selectedIds.size > 0 && selectedIds.size < transactions.length;
+    const selectableTransactions = transactions.filter(t => !t.is_partner_credit);
+    const allSelected = selectableTransactions.length > 0 && selectedIds.size === selectableTransactions.length;
+    const someSelected = selectedIds.size > 0 && selectedIds.size < selectableTransactions.length;
     const hasPending = Object.keys(pendingChanges).length > 0;
 
     // h-9 ensures select and input elements are the same height across browsers
@@ -297,8 +298,9 @@ export default function TransactionsPage() {
         const curDescription = changes.description !== undefined ? changes.description : (tx.description || "");
         const hasNotes = curDescription.trim().length > 0;
         const isMandatoryExclude = alwaysExcludedCategories.includes(curCat);
-        const isExcluded = changes.exclude_from_report !== undefined ? changes.exclude_from_report : (tx.exclude_from_report || false);
-        return { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude };
+        const isExcluded = isMandatoryExclude || (changes.exclude_from_report !== undefined ? changes.exclude_from_report : (tx.exclude_from_report || false));
+        const isPartnerCredit = tx.is_partner_credit === true;
+        return { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude, isPartnerCredit };
     };
 
     const openParentModal = async (txId) => {
@@ -446,9 +448,27 @@ export default function TransactionsPage() {
                         <button onClick={() => setShowInsertModal(true)} className="text-blue-500 hover:underline">Add one manually</button>.
                     </div>
                 ) : transactions.map(tx => {
-                    const { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude } = deriveTx(tx);
+                    const { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude, isPartnerCredit } = deriveTx(tx);
                     const fmt = (n) => `$${n.toFixed(2)}`;
                     const notesOpen = expandedNotes.has(tx.id);
+
+                    // Partner-credit rows — compact read-only card on mobile
+                    if (isPartnerCredit) {
+                        return (
+                            <div key={tx.id} className="bg-teal-50/60 border border-teal-100 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-teal-400 text-sm shrink-0">↩</span>
+                                    <div className="min-w-0">
+                                        <p className="text-sm font-medium text-teal-700 truncate">{tx.merchant}</p>
+                                        <p className="text-xs text-teal-400 mt-0.5">{tx.date} · {tx.category}</p>
+                                    </div>
+                                </div>
+                                <span className="text-sm font-semibold text-teal-600 tabular-nums shrink-0">
+                                    {new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 2 }).format(tx.amount)}
+                                </span>
+                            </div>
+                        );
+                    }
 
                     return (
                         <div key={tx.id}
@@ -633,12 +653,44 @@ export default function TransactionsPage() {
                                     </td>
                                 </tr>
                             ) : transactions.map(tx => {
-                                const { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude } = deriveTx(tx);
+                                const { changes, curCat, curType, isSelected, isDirty, originalRef, totalReimb, liveNet, displaySelf, displayPartner, curDescription, hasNotes, isExcluded, isMandatoryExclude, isPartnerCredit } = deriveTx(tx);
                                 const notesOpen = expandedNotes.has(tx.id);
+
+                                // Partner-credit rows get a simplified read-only display
+                                if (isPartnerCredit) {
+                                    return (
+                                        <tr key={tx.id} className="border-b border-teal-50 bg-teal-50/40">
+                                            <td className="px-4 py-2.5" />
+                                            <td className="px-4 py-2.5 text-xs text-teal-600">{tx.date}</td>
+                                            <td className="px-4 py-2.5">
+                                                <div className="flex items-center gap-1.5">
+                                                    <span className="text-teal-400 shrink-0" title="Auto-created partner credit">↩</span>
+                                                    <span className="text-sm font-medium text-teal-700">{tx.merchant}</span>
+                                                </div>
+                                                {tx.description && (
+                                                    <p className="text-[11px] text-teal-400 mt-0.5 pl-4">{tx.description}</p>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-2.5">
+                                                <span className="text-xs font-medium px-2.5 py-1 rounded-full bg-teal-100 text-teal-600">Credit</span>
+                                            </td>
+                                            <td className="px-4 py-2.5 text-xs text-teal-600">{tx.category}</td>
+                                            <td className="px-4 py-2.5 text-right font-mono text-sm font-semibold text-teal-600">
+                                                {new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD", maximumFractionDigits: 2 }).format(tx.amount)}
+                                            </td>
+                                            <td colSpan={3} className="px-4 py-2.5 text-xs text-teal-400 text-center">
+                                                Manage in Reconcile
+                                            </td>
+                                        </tr>
+                                    );
+                                }
 
                                 return (
                                     <React.Fragment key={tx.id}>
-                                        <tr className={`border-b ${notesOpen ? 'border-gray-50' : 'border-gray-100'} transition-colors ${isSelected ? 'bg-blue-50/60' : isDirty ? 'bg-slate-50/60' : 'hover:bg-gray-50/60'} ${isExcluded && !isMandatoryExclude ? 'opacity-50' : ''}`}>
+                                        <tr
+                                            className={`border-b ${notesOpen ? 'border-gray-50' : 'border-gray-100'} transition-colors ${isSelected ? 'bg-blue-50/60' : isDirty ? 'bg-slate-50/60' : 'hover:bg-gray-50/60'}`}
+                                            style={isExcluded ? { opacity: 0.4 } : undefined}
+                                        >
                                             <td className="px-4 py-2.5">
                                                 <input type="checkbox" checked={isSelected} onChange={() => toggleSelect(tx.id)}
                                                     className="h-3.5 w-3.5 cursor-pointer accent-blue-500" />
@@ -741,7 +793,7 @@ export default function TransactionsPage() {
                                         </tr>
                                         {/* Expandable notes row */}
                                         {notesOpen && (
-                                            <tr className="border-b border-gray-100 bg-blue-50/30">
+                                            <tr className="border-b border-gray-100 bg-blue-50/30" style={isExcluded ? { opacity: 0.4 } : undefined}>
                                                 <td colSpan={2} />
                                                 <td colSpan={7} className="px-4 pb-2.5 pt-1">
                                                     <div className="flex items-center gap-2">
