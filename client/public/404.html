@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // GitHub Pages SPA redirect: encode the path into a query string so
+      // index.html can restore it via history.replaceState.
+      var path = window.location.pathname;
+      window.location.replace(
+        window.location.origin + "/?r=" + encodeURIComponent(path) +
+        (window.location.search ? "&" + window.location.search.slice(1) : "") +
+        window.location.hash
+      );
+    </script>
+  </head>
+  <body></body>
+</html>

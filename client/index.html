@@ -4,7 +4,14 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>client</title>
+    <title>BudgetSync</title>
+    <script>
+      // Restore path encoded by 404.html so React Router sees the correct route
+      (function () {
+        var r = new URLSearchParams(window.location.search).get("r");
+        if (r) window.history.replaceState(null, "", decodeURIComponent(r));
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
