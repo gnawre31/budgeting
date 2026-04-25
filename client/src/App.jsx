@@ -14,7 +14,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  useCacheInvalidation(user?.id ?? null);
+  const refreshKey = useCacheInvalidation(user?.id ?? null);
 
   const fetchDisplayName = async (uid) => {
     const { data } = await supabase.from("users").select("display_name").eq("id", uid).single();
@@ -89,7 +89,7 @@ export default function App() {
 
       <main>
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<DashboardPage refreshKey={refreshKey} />} />
           <Route path="/upload" element={<UploadPage />} />
           <Route path="/reconcile" element={<ReconciliationView />} />
           <Route path="/transactions" element={<TransactionsPage />} />

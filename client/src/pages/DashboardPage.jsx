@@ -120,22 +120,15 @@ function MonthPicker({ selectedMonth, onChange }) {
     );
 }
 
-export default function DashboardPage() {
+export default function DashboardPage({ refreshKey = 0 }) {
     const [selectedMonth, setSelectedMonth] = useState(() => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     });
     const [viewMode, setViewMode] = useState("household");
     const [excludeSpecial, setExcludeSpecial] = useState(false);
-    const [refreshKey, setRefreshKey] = useState(0);
 
     const { specialCategories, alwaysExcludedCategories, fixedCategories } = useCategories();
-
-    useEffect(() => {
-        const handler = () => setRefreshKey(k => k + 1);
-        window.addEventListener("bsync:data-changed", handler);
-        return () => window.removeEventListener("bsync:data-changed", handler);
-    }, []);
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;

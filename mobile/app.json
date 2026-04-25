@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "BudgetSync",
+    "slug": "budgetsync",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "budgetsync",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.budgetsync.app"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "@react-native-async-storage/async-storage",
+        { "StorageImplication": "default" }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}

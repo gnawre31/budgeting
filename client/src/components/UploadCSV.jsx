@@ -23,11 +23,16 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
 
     // ---------- 2. Format Detection ----------
     const detectBankFormat = (headers) => {
-        const normalized = headers.map((h) => h?.toString().toLowerCase().trim());
+        const normalized = headers.map((h) => h?.toString().replace(/^\uFEFF/, "").toLowerCase().trim());
 
         // e.g. September2025_5847.csv
         if (normalized.includes("posted date") && normalized.includes("payee")) {
             return "AMEX_FORMAT";
+        }
+
+        // e.g. WealthSimple activities export
+        if (normalized.some(h => h.includes("transaction_date")) && normalized.some(h => h.includes("net_cash_amount"))) {
+            return "WEALTHSIMPLE_FORMAT";
         }
 
         // e.g. Money-Back World Mastercard.CSV & Savings.CSV
@@ -85,6 +90,46 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
         });
     };
 
+    // For WealthSimple activities export
+    const parseWealthSimpleFormat = (rows, sourceFile) => {
+        // Drop internal credit counter-entries (positive SPEND rows are the other side of a debit)
+        const filtered = rows.filter(row => {
+            const amount = parseFloat(row["net_cash_amount"] || 0);
+            const subType = row["activity_sub_type"]?.toString().trim();
+            if (amount > 0 && subType === "SPEND") return false;
+            if (amount === 0) return false;
+            return true;
+        });
+
+        // Deduplicate: same transaction appears once per account — key on (date, amount)
+        const seen = new Set();
+        const deduped = filtered.filter(row => {
+            const key = `${row["transaction_date"]}|${row["net_cash_amount"]}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
+
+        return deduped.map(row => {
+            const rawAmount = parseFloat(row["net_cash_amount"] || 0);
+            const type = rawAmount >= 0 ? "Income" : "Expense";
+            const amount = Math.abs(rawAmount);
+            const merchant = row["name"]?.trim() ||
+                row["activity_sub_type"]?.trim() ||
+                row["activity_type"]?.trim() ||
+                "WealthSimple";
+
+            return {
+                date: normalizeDate(row["transaction_date"]),
+                merchant,
+                type,
+                amount,
+                category: "Uncategorized",
+                sourceFile,
+            };
+        });
+    };
+
     // For "accountactivity..." files (No Headers)
     const parseNoHeaders = (data, sourceFile) => {
         return data.map((row) => {
@@ -125,7 +170,7 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
                     let parsedTransactions = [];
 
                     if (hasHeaders) {
-                        const headers = data[0].map(h => h?.toString().trim());
+                        const headers = data[0].map(h => h?.toString().replace(/^\uFEFF/, "").trim());
                         const format = detectBankFormat(headers);
 
                         // Convert rows to Object format mapping header string -> value
@@ -137,6 +182,8 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
 
                         if (format === "AMEX_FORMAT") {
                             parsedTransactions = parseAmexFormat(rowsAsObjects, file.name);
+                        } else if (format === "WEALTHSIMPLE_FORMAT") {
+                            parsedTransactions = parseWealthSimpleFormat(rowsAsObjects, file.name);
                         } else if (format === "TANGERINE_FORMAT") {
                             parsedTransactions = parseTangerineFormat(rowsAsObjects, file.name);
                         } else {

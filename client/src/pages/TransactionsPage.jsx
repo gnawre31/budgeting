@@ -153,6 +153,7 @@ export default function TransactionsPage() {
             const { error } = await supabase.from("transactions").delete().eq("id", id);
             if (error) throw error;
             await fetchTransactions();
+            window.dispatchEvent(new CustomEvent("bsync:data-changed"));
         } catch (err) { alert(err.message); setLoading(false); }
     };
 
@@ -173,6 +174,7 @@ export default function TransactionsPage() {
             const { error } = await supabase.from("transactions").delete().in("id", deletableIds);
             if (error) throw error;
             await fetchTransactions();
+            window.dispatchEvent(new CustomEvent("bsync:data-changed"));
         } catch (err) { alert(err.message); setLoading(false); }
     };
 
@@ -221,6 +223,7 @@ export default function TransactionsPage() {
             setShowInsertModal(false);
             setInsertForm(emptyForm);
             await fetchTransactions();
+            window.dispatchEvent(new CustomEvent("bsync:data-changed"));
         } catch (err) { setInsertError(err.message); }
         finally { setInserting(false); }
     };
@@ -271,6 +274,7 @@ export default function TransactionsPage() {
             setShowReviewModal(false);
             setRuleSuggestion(null);
             await fetchTransactions();
+            window.dispatchEvent(new CustomEvent("bsync:data-changed"));
         } catch (err) {
             setSaveError(err.message);
         } finally { setLoading(false); }
