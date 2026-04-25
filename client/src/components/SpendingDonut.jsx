@@ -93,15 +93,15 @@ export default function SpendingDonut({ selectedMonth, viewMode, excludeSpecial 
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Spending Breakdown</h2>
                 <p className="text-sm text-gray-500 mt-0.5">By category</p>
             </div>
 
             {!loading && slices.slices.length === 0 ? (
-                <div className="px-6 py-12 text-center text-sm text-gray-400">No spending data</div>
+                <div className="px-4 sm:px-6 py-12 text-center text-sm text-gray-400">No spending data</div>
             ) : (
-                <div className="px-6 py-5 flex flex-col sm:flex-row gap-6 items-center">
+                <div className="px-4 sm:px-6 py-5 flex flex-col sm:flex-row gap-6 items-center">
                     <div className="shrink-0">
                         <svg width="160" height="160" viewBox="0 0 160 160">
                             {slices.slices.map((s, i) => (

@@ -123,7 +123,7 @@ export default function MonthlySpendChart({ selectedMonth, viewMode, alwaysExclu
             )}
 
             {/* Header */}
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between gap-4">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100 flex items-center justify-between gap-4">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-900">Monthly Spend</h2>
                     <p className="text-sm text-gray-500 mt-0.5">Last 12 months</p>
@@ -187,7 +187,7 @@ export default function MonthlySpendChart({ selectedMonth, viewMode, alwaysExclu
             </div>
 
             {/* Chart */}
-            <div className="px-6 py-5">
+            <div className="px-4 sm:px-6 py-5">
                 <div className="flex items-end gap-1.5" style={{ height: `${CHART_H}px` }}>
                     {monthBuckets.map(b => {
                         const isSelected = b.month === selectedMonth;

@@ -87,7 +87,7 @@ export default function MoMComparison({ selectedMonth, viewMode, excludeSpecial 
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-900">Month-over-Month</h2>
                     <p className="text-sm text-gray-500 mt-0.5">Spending by category</p>
@@ -99,9 +99,9 @@ export default function MoMComparison({ selectedMonth, viewMode, excludeSpecial 
             </div>
 
             {!loading && rows.length === 0 ? (
-                <div className="px-6 py-12 text-center text-sm text-gray-400">No spending data</div>
+                <div className="px-4 sm:px-6 py-12 text-center text-sm text-gray-400">No spending data</div>
             ) : (
-                <div className="px-6 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+                <div className="px-4 sm:px-6 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-8">
                     {rows.map(({ cat, cur, prv, delta }) => {
                         const significant = Math.abs(delta) > 30;
 

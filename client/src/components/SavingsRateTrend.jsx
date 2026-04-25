@@ -108,12 +108,12 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Savings Rate</h2>
                 <p className="text-sm text-gray-500 mt-0.5">% of income saved per month</p>
             </div>
 
-            <div className="px-6 py-5">
+            <div className="px-4 sm:px-6 py-5">
                 <div className="flex items-end gap-2" style={{ height: `${CONTAINER_H}px` }}>
                     {rates.map(r => {
                         const isSelected = r.month === selectedMonth;

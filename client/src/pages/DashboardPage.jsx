@@ -161,7 +161,7 @@ export default function DashboardPage({ refreshKey = 0 }) {
     return (
         <div>
             {/* ── Sticky header bar ─────────────────────────────────── */}
-            <div className="sticky top-12 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100/80 shadow-sm">
+            <div className="sticky top-12 z-40 bg-white/95 backdrop-blur-md border-b border-gray-100/80 shadow-sm overflow-x-hidden">
                 <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     {/* Title */}
                     <div className="hidden sm:block">
@@ -170,7 +170,7 @@ export default function DashboardPage({ refreshKey = 0 }) {
                     </div>
 
                     {/* Controls */}
-                    <div className="flex items-center gap-2 flex-wrap justify-end sm:justify-end">
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
                         {/* Special filter toggle */}
                         <button
                             onClick={() => setExcludeSpecial(v => !v)}
@@ -182,7 +182,7 @@ export default function DashboardPage({ refreshKey = 0 }) {
                                         ? `Showing typical spend only (${specialCategories.join(", ")} excluded)`
                                         : `Click to hide: ${specialCategories.join(", ")}`
                             }
-                            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-xl border transition-all ${
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-sm font-medium rounded-xl border transition-all ${
                                 excludeSpecial
                                     ? "bg-violet-50 border-violet-200 text-violet-700"
                                     : hasSpecialCategories
@@ -190,7 +190,7 @@ export default function DashboardPage({ refreshKey = 0 }) {
                                         : "bg-gray-50 border-transparent text-gray-300 cursor-not-allowed"
                             }`}
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5 shrink-0">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
                             </svg>
                             {excludeSpecial ? "Typical only" : "All spending"}
@@ -200,13 +200,13 @@ export default function DashboardPage({ refreshKey = 0 }) {
                         <div className="flex bg-gray-100 p-0.5 rounded-xl">
                             <button
                                 onClick={() => setViewMode("household")}
-                                className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${viewMode === "household" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                                className={`px-3 sm:px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${viewMode === "household" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                             >
                                 Household
                             </button>
                             <button
                                 onClick={() => setViewMode("self")}
-                                className={`px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${viewMode === "self" ? "bg-white text-blue-500 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                                className={`px-3 sm:px-4 py-1.5 text-sm font-medium rounded-[10px] transition-all ${viewMode === "self" ? "bg-white text-blue-500 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                             >
                                 Just Me
                             </button>

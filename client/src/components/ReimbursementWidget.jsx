@@ -64,7 +64,7 @@ export default function ReimbursementWidget() {
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100 flex items-start justify-between">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100 flex items-start justify-between">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-900">Reimbursements</h2>
                     <p className="text-sm text-gray-500 mt-0.5">Unreconciled items</p>
@@ -76,7 +76,7 @@ export default function ReimbursementWidget() {
                 )}
             </div>
 
-            <div className="px-6 py-3 flex-1 flex flex-col">
+            <div className="px-4 sm:px-6 py-3 flex-1 flex flex-col">
                 {!loading && items.length === 0 ? (
                     <div className="flex-1 flex flex-col items-center justify-center gap-2 py-4">
                         <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">

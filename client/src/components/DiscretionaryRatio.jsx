@@ -49,12 +49,12 @@ export default function DiscretionaryRatio({ selectedMonth, viewMode, excludeSpe
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Fixed vs Variable</h2>
                 <p className="text-sm text-gray-500 mt-0.5">Discretionary breakdown</p>
             </div>
 
-            <div className="px-6 py-5 space-y-5">
+            <div className="px-4 sm:px-6 py-5 space-y-5">
                 <div className="grid grid-cols-2 gap-3">
                     <div className="bg-gray-50 rounded-xl p-4">
                         <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Fixed</p>

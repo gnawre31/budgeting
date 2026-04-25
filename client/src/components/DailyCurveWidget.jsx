@@ -128,7 +128,7 @@ export default function DailyCurveWidget({ selectedMonth, viewMode, excludeSpeci
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-900">Daily Spending</h2>
                     <p className="text-sm text-gray-500 mt-0.5">Cumulative spend through the month</p>
@@ -139,7 +139,7 @@ export default function DailyCurveWidget({ selectedMonth, viewMode, excludeSpeci
                 </div>
             </div>
 
-            <div className="px-6 py-5">
+            <div className="px-4 sm:px-6 py-5">
                 <svg ref={svgRef} width="100%" height={SVG_H} className="overflow-visible">
                     {onPacePts.length >= 2 && (
                         <path d={buildPath(onPacePts)} fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeDasharray="4 3" />

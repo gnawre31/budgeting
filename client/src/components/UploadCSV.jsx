@@ -35,6 +35,11 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
             return "WEALTHSIMPLE_FORMAT";
         }
 
+        // e.g. Scotiabank Basic_Plus export (Filter, Date, Description, Sub-description, Type of Transaction, Amount, Balance)
+        if (normalized.some(h => h.includes("sub-description")) && normalized.some(h => h.includes("type of transaction"))) {
+            return "SCOTIABANK_FORMAT";
+        }
+
         // e.g. Money-Back World Mastercard.CSV & Savings.CSV
         if (
             (normalized.includes("transaction date") || normalized.includes("date")) &&
@@ -130,6 +135,37 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
         });
     };
 
+    // For Scotiabank exports (Filter, Date, Description, Sub-description, Type of Transaction, Amount, Balance)
+    const parseScotiabankFormat = (rows, sourceFile) => {
+        return rows
+            .filter(row => {
+                // Skip rows where Amount is missing or zero
+                const amount = parseFloat(row["Amount"] || 0);
+                return !isNaN(amount) && amount !== 0;
+            })
+            .map(row => {
+                const rawAmount = parseFloat(row["Amount"] || 0);
+                // "Debit" = money leaving = Expense; "Credit" = money arriving = Income
+                const txType = row["Type of Transaction"]?.toString().trim();
+                const type = txType === "Credit" ? "Income" : "Expense";
+                const amount = Math.abs(rawAmount);
+                // Merchant is the Sub-description; fall back to Description if blank
+                const merchant =
+                    row["Sub-description"]?.toString().trim() ||
+                    row["Description"]?.toString().trim() ||
+                    "Scotiabank";
+
+                return {
+                    date: normalizeDate(row["Date"]),
+                    merchant,
+                    type,
+                    amount,
+                    category: "Uncategorized",
+                    sourceFile,
+                };
+            });
+    };
+
     // For "accountactivity..." files (No Headers)
     const parseNoHeaders = (data, sourceFile) => {
         return data.map((row) => {
@@ -184,6 +220,8 @@ const UploadCSV = forwardRef(({ onDataParsed }, ref) => {
                             parsedTransactions = parseAmexFormat(rowsAsObjects, file.name);
                         } else if (format === "WEALTHSIMPLE_FORMAT") {
                             parsedTransactions = parseWealthSimpleFormat(rowsAsObjects, file.name);
+                        } else if (format === "SCOTIABANK_FORMAT") {
+                            parsedTransactions = parseScotiabankFormat(rowsAsObjects, file.name);
                         } else if (format === "TANGERINE_FORMAT") {
                             parsedTransactions = parseTangerineFormat(rowsAsObjects, file.name);
                         } else {

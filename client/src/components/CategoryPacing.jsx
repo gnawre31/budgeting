@@ -164,14 +164,14 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{displayMonthName}</p>
                 <h2 className="text-lg font-semibold text-gray-900 mt-0.5">Financial Overview</h2>
             </div>
 
             {/* KPI cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-gray-100">
-                <div className="bg-white px-6 py-5">
+                <div className="bg-white px-4 sm:px-6 py-5">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
                         {viewMode === 'self' ? 'My Cash Flow' : 'Cash Flow'}
                     </p>
@@ -193,7 +193,7 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
                     </div>
                 </div>
 
-                <div className="bg-white px-6 py-5">
+                <div className="bg-white px-4 sm:px-6 py-5">
                     <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Budget Health</p>
                     <div className="flex items-baseline gap-2 mb-4">
                         <span className={`text-3xl font-semibold tracking-tight ${isOverBudget ? 'text-rose-500' : 'text-indigo-500'}`}>
@@ -215,7 +215,7 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
             </div>
 
             {/* Category grid */}
-            <div className="px-6 py-5">
+            <div className="px-4 sm:px-6 py-5">
                 {/* Legend */}
                 <div className="flex items-center justify-between mb-5">
                     <h3 className="text-sm font-semibold text-gray-900">Categories</h3>

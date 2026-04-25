@@ -347,7 +347,7 @@ export default function TransactionsPage() {
     );
 
     return (
-        <div className="max-w-[98%] mx-auto px-3 sm:px-6 pt-6 sm:pt-8 pb-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8 pb-24">
             {loading && (
                 <div className="fixed inset-0 bg-white/50 backdrop-blur-sm z-[200] flex items-center justify-center">
                     <div className="bg-white border border-gray-200 shadow-lg rounded-2xl px-6 py-3 flex items-center gap-3">

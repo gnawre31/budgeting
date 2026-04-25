@@ -112,12 +112,12 @@ export default function SavingsTrend({ selectedMonth, viewMode, excludeSpecial =
                 </div>
             )}
 
-            <div className="px-6 py-5 border-b border-gray-100">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Savings Trend</h2>
                 <p className="text-sm text-gray-500 mt-0.5">Net saved per month</p>
             </div>
 
-            <div className="px-6 py-5">
+            <div className="px-4 sm:px-6 py-5">
                 <div className="flex items-end gap-1" style={{ height: '120px' }}>
                     {monthData.map((d) => {
                         const isSelected = d.month === selectedMonth;

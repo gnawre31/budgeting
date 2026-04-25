@@ -166,7 +166,7 @@ export default function CashFlowChart({ selectedMonth, viewMode, excludeSpecial 
             )}
 
             {/* Header */}
-            <div className="px-6 py-5 border-b border-gray-100 flex items-start justify-between">
+            <div className="px-4 sm:px-6 py-5 border-b border-gray-100 flex items-start justify-between">
                 <div>
                     <h2 className="text-lg font-semibold text-gray-900">Cash Flow</h2>
                     <p className="text-sm text-gray-500 mt-0.5">Income vs. expenses — last 12 months</p>
@@ -317,7 +317,7 @@ export default function CashFlowChart({ selectedMonth, viewMode, excludeSpecial 
             </div>
 
             {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
+            <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
                 <div className="flex items-center gap-6">
                     <span>Avg income <span className="font-semibold text-green-500">{fmtVal(avgIncome)}/mo</span></span>
                     <span>Avg spend <span className="font-semibold text-rose-500">{fmtVal(avgExpense)}/mo</span></span>

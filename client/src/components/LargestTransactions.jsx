@@ -77,12 +77,12 @@ export default function LargestTransactions({ selectedMonth, viewMode, excludeSp
                 </div>
             )}
 
-            <div className="px-6 pb-3 pt-5 border-b border-gray-100">
+            <div className="px-4 sm:px-6 pb-3 pt-5 border-b border-gray-100">
                 <h2 className="text-lg font-semibold text-gray-900">Largest Transactions</h2>
                 <p className="text-sm text-gray-500 mt-0.5">Top 5 this month</p>
             </div>
 
-            <div className="px-6 py-3 flex-1 flex flex-col">
+            <div className="px-4 sm:px-6 py-3 flex-1 flex flex-col">
                 {!loading && top5.length === 0 ? (
                     <div className="flex-1 flex items-center justify-center">
                         <p className="text-sm text-gray-400">No transactions</p>
