@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useCategories } from "../hooks/useCategories";
 
@@ -78,6 +78,7 @@ export default function ReconciliationView() {
     const [linkMode, setLinkMode] = useState("category"); // "category" | "transaction"
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
+    const linkPanelRef = useRef(null);
 
     // Transaction-link panel state
     const [txSearch, setTxSearch] = useState("");
@@ -155,6 +156,12 @@ export default function ReconciliationView() {
         setTxSearch("");
         setTxCategory("");
         setSelectedCategory("");
+        // On mobile the link panel is below the list — scroll it into view
+        if (tx) {
+            setTimeout(() => {
+                linkPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+            }, 50);
+        }
     };
 
     // ── link to category ──────────────────────────────────────────────────────
@@ -366,7 +373,7 @@ export default function ReconciliationView() {
                 </div>
 
                 {/* ── RIGHT: link panel ── */}
-                <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden sticky top-6">
+                <div ref={linkPanelRef} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm overflow-hidden md:sticky md:top-24">
                     <div className="px-5 py-4 border-b border-gray-100">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Link To</p>
                     </div>

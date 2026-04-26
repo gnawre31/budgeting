@@ -7,9 +7,9 @@ const fmtPct = (n) => `${n >= 0 ? "" : "−"}${Math.abs(n).toFixed(1)}%`;
 
 function KPICard({ label, value, sub, color = "text-gray-900" }) {
     return (
-        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-5 flex-1 min-w-0">
-            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">{label}</p>
-            <p className={`text-2xl font-semibold tracking-tight tabular-nums ${color}`}>{value}</p>
+        <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-4 sm:px-6 py-4 sm:py-5 min-w-0">
+            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">{label}</p>
+            <p className={`text-xl sm:text-2xl font-semibold tracking-tight tabular-nums ${color}`}>{value}</p>
             {sub && <p className="text-xs text-gray-400 mt-1">{sub}</p>}
         </div>
     );
@@ -85,16 +85,16 @@ export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = fal
 
     if (loading) {
         return (
-            <div className="flex gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-6 py-5 flex-1 h-[88px] animate-pulse bg-gray-50" />
+                    <div key={i} className="bg-white rounded-2xl border border-gray-200/60 shadow-sm px-4 sm:px-6 py-4 sm:py-5 h-[80px] sm:h-[88px] animate-pulse bg-gray-50" />
                 ))}
             </div>
         );
     }
 
     return (
-        <div className="flex gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <KPICard label="Spending" value={fmt(totalSpend)} />
             <KPICard label="Income" value={fmt(totalIncome)} color="text-green-600" />
             <KPICard
