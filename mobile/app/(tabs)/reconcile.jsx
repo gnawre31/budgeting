@@ -127,6 +127,12 @@ export default function ReconcileScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
+      const { data: profile } = await supabase
+        .from('users')
+        .select('partner_id')
+        .eq('id', user.id)
+        .maybeSingle();
+
       const month = fmtMonth(selectedChild.date);
       const merchant = `↩ Partner credit – ${selectedCategory}`;
 
@@ -142,7 +148,7 @@ export default function ReconcileScreen() {
         type: 'Expense',
         category: selectedCategory,
         user_id: user.id,
-        partner_id: null,
+        partner_id: profile?.partner_id ?? null,
         exclude_from_report: false,
         parent_id: selectedChild.id,
         is_partner_credit: true,
@@ -175,6 +181,10 @@ export default function ReconcileScreen() {
         .eq('id', parentId)
         .single();
       if (fetchErr) throw fetchErr;
+
+      if (selectedChild.amount > parent.amount) {
+        throw new Error(`Reimbursement ($${selectedChild.amount.toFixed(2)}) exceeds expense ($${parent.amount.toFixed(2)}). Link to a larger expense.`);
+      }
 
       const selfRatio = (parent.self_amount ?? 0) / (parent.amount || 1);
       const newTotal = Math.max(0, parent.amount - selectedChild.amount);
