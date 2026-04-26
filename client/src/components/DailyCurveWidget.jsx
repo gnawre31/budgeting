@@ -65,7 +65,6 @@ export default function DailyCurveWidget({ selectedMonth, viewMode, excludeSpeci
     }, [selectedMonth, totalDays]);
 
     const { actualPts, projPts, onPacePts, budget, actualTotal } = useMemo(() => {
-        const userId = null; // can't store user.id easily; use a workaround below
         const spendKey = viewMode === "household" ? "amount" : null;
 
         const filtered = rawTxns

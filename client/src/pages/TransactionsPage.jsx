@@ -105,7 +105,7 @@ export default function TransactionsPage() {
         if (field === "amount") { updates.self_amount = value; updates.partner_amount = 0; }
         else if (field === "self_amount") updates.partner_amount = Number((getVal("amount") - value).toFixed(2));
         else if (field === "partner_amount") updates.self_amount = Number((getVal("amount") - value).toFixed(2));
-        if (field === "type" && value === "Income") updates.category = "Reimbursement";
+        if (field === "type" && value === "Income") updates.category = incomeCategories[0] || "Reimbursement";
 
         if (field === "category") {
             const isAlwaysExcluded = alwaysExcludedCategories.includes(value);
@@ -192,7 +192,7 @@ export default function TransactionsPage() {
             if (field === "amount") { const n = parseFloat(value) || 0; next.self_amount = String(n); next.partner_amount = "0"; }
             else if (field === "self_amount") next.partner_amount = String(Math.max(0, Number(((parseFloat(prev.amount) || 0) - (parseFloat(value) || 0)).toFixed(2))));
             else if (field === "partner_amount") next.self_amount = String(Math.max(0, Number(((parseFloat(prev.amount) || 0) - (parseFloat(value) || 0)).toFixed(2))));
-            else if (field === "type" && value === "Income") next.category = "Reimbursement";
+            else if (field === "type" && value === "Income") next.category = incomeCategories[0] || "Reimbursement";
             return next;
         });
     };
@@ -323,7 +323,17 @@ export default function TransactionsPage() {
         setPotentialParents([]);
         setParentsLoading(true);
         setShowParentModal(true);
-        const { data } = await supabase.from("transactions").select("id, date, merchant, amount, original_amount").eq("type", "Expense").neq("id", txId).order("date", { ascending: false }).limit(20);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) { setParentsLoading(false); return; }
+        const { data } = await supabase
+            .from("transactions")
+            .select("id, date, merchant, amount, original_amount")
+            .eq("type", "Expense")
+            .is("parent_id", null)
+            .neq("id", txId)
+            .or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`)
+            .order("date", { ascending: false })
+            .limit(20);
         setPotentialParents(data || []);
         setParentsLoading(false);
     };
@@ -335,8 +345,8 @@ export default function TransactionsPage() {
             className={`${inputCls} text-right font-mono w-full ${highlight ? 'text-blue-500' : ''}`}
             onFocus={() => setEditingCell({ id: tx.id, field, value: value.toString() })}
             onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
-            onBlur={() => {
-                const n = parseFloat(editingCell?.value);
+            onBlur={e => {
+                const n = parseFloat(e.target.value);
                 if (!isNaN(n)) stageChange(tx.id, field, n);
                 setEditingCell(null);
             }}
@@ -574,7 +584,7 @@ export default function TransactionsPage() {
                                         className="w-full text-sm font-mono text-indigo-500 bg-gray-50 rounded-lg px-2.5 py-1.5 outline-none border border-transparent focus:bg-white focus:border-gray-200"
                                         onFocus={() => setEditingCell({ id: tx.id, field: "self_amount", value: displaySelf.toString() })}
                                         onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
-                                        onBlur={() => { const n = parseFloat(editingCell?.value); if (!isNaN(n)) stageChange(tx.id, "self_amount", n); setEditingCell(null); }}
+                                        onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) stageChange(tx.id, "self_amount", n); setEditingCell(null); }}
                                         onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setEditingCell(null); e.target.blur(); } }}
                                     />
                                 </div>
@@ -586,7 +596,7 @@ export default function TransactionsPage() {
                                         className="w-full text-sm font-mono text-teal-500 bg-gray-50 rounded-lg px-2.5 py-1.5 outline-none border border-transparent focus:bg-white focus:border-gray-200"
                                         onFocus={() => setEditingCell({ id: tx.id, field: "partner_amount", value: displayPartner.toString() })}
                                         onChange={e => setEditingCell({ ...editingCell, value: e.target.value })}
-                                        onBlur={() => { const n = parseFloat(editingCell?.value); if (!isNaN(n)) stageChange(tx.id, "partner_amount", n); setEditingCell(null); }}
+                                        onBlur={e => { const n = parseFloat(e.target.value); if (!isNaN(n)) stageChange(tx.id, "partner_amount", n); setEditingCell(null); }}
                                         onKeyDown={e => { if (e.key === 'Enter') e.target.blur(); if (e.key === 'Escape') { setEditingCell(null); e.target.blur(); } }}
                                     />
                                 </div>
