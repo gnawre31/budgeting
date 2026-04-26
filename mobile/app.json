@@ -12,11 +12,7 @@
       "bundleIdentifier": "com.budgetsync.app"
     },
     "plugins": [
-      "expo-router",
-      [
-        "@react-native-async-storage/async-storage",
-        { "StorageImplication": "default" }
-      ]
+      "expo-router"
     ],
     "experiments": {
       "typedRoutes": false
