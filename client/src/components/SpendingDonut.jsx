@@ -69,10 +69,14 @@ export default function SpendingDonut({ selectedMonth, viewMode, excludeSpecial 
 
     const slices = useMemo(() => {
         const spendKey = viewMode === "household" ? "total_spent" : "self_spent";
-        const filtered = rawExpenses
+        // Aggregate all legs per category before building slices
+        const totals = new Map();
+        rawExpenses
             .filter(d => !alwaysExcludedCategories.includes(d.category))
             .filter(d => !excludeSpecial || !specialCategories.includes(d.category))
-            .map(d => ({ label: d.category, value: d[spendKey] || 0 }))
+            .forEach(d => totals.set(d.category, (totals.get(d.category) || 0) + (d[spendKey] || 0)));
+        const filtered = Array.from(totals.entries())
+            .map(([label, value]) => ({ label, value }))
             .filter(d => d.value > 0)
             .sort((a, b) => b.value - a.value);
 

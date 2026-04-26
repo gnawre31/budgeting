@@ -60,8 +60,8 @@ export default function MoMComparison({ selectedMonth, viewMode, excludeSpecial 
         ]);
 
         return Array.from(cats).map(cat => {
-            const cur = rawCurrent.find(d => d.category === cat)?.[spendKey] || 0;
-            const prv = rawPrev.find(d => d.category === cat)?.[spendKey] || 0;
+            const cur = rawCurrent.filter(d => d.category === cat).reduce((s, d) => s + (d[spendKey] || 0), 0);
+            const prv = rawPrev.filter(d => d.category === cat).reduce((s, d) => s + (d[spendKey] || 0), 0);
             return { cat, cur, prv, delta: cur - prv };
         }).filter(r => r.cur > 0 || r.prv > 0)
           .sort((a, b) => b.cur - a.cur);

@@ -128,7 +128,7 @@ export default function DashboardPage({ refreshKey = 0 }) {
     const [viewMode, setViewMode] = useState("household");
     const [excludeSpecial, setExcludeSpecial] = useState(false);
 
-    const { specialCategories, alwaysExcludedCategories, fixedCategories } = useCategories();
+    const { specialCategories, alwaysExcludedCategories, fixedCategories, partnerId } = useCategories();
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -156,6 +156,7 @@ export default function DashboardPage({ refreshKey = 0 }) {
         specialCategories,
         alwaysExcludedCategories,
         refreshKey,
+        partnerId,
     };
 
     return (

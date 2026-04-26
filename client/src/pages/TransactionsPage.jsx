@@ -107,8 +107,15 @@ export default function TransactionsPage() {
         else if (field === "partner_amount") updates.self_amount = Number((getVal("amount") - value).toFixed(2));
         if (field === "type" && value === "Income") updates.category = "Reimbursement";
 
-        if (field === "category" && tx && value !== tx.category) {
-            setRuleSuggestion({ merchant: current.merchant ?? tx.merchant, type: current.type ?? tx.type, category: value });
+        if (field === "category") {
+            const isAlwaysExcluded = alwaysExcludedCategories.includes(value);
+            const isIncome = incomeCategories.includes(value);
+            // Income always-excluded (Reimbursement): keep false so reconcile can find it
+            // Expense always-excluded (Credit Card Payment, Internal Transfer): force true
+            if (isAlwaysExcluded) updates.exclude_from_report = !isIncome;
+            if (tx && value !== tx.category) {
+                setRuleSuggestion({ merchant: current.merchant ?? tx.merchant, type: current.type ?? tx.type, category: value });
+            }
         }
 
         Object.keys(updates).forEach(k => { if (updates[k] === tx[k]) delete updates[k]; });

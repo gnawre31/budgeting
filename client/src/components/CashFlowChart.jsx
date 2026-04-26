@@ -19,7 +19,7 @@ const fmtVal = (v) => {
 const PAD = { top: 20, right: 44, bottom: 34, left: 52 };
 const CHART_H = 200; // total SVG height in px
 
-export default function CashFlowChart({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [] }) {
+export default function CashFlowChart({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], partnerId = null }) {
     const [fetchedMonths, setFetchedMonths]   = useState([]);
     const [fetchedExpenses, setFetchedExpenses] = useState([]);
     const [fetchedIncome, setFetchedIncome]   = useState([]);
@@ -66,7 +66,7 @@ export default function CashFlowChart({ selectedMonth, viewMode, excludeSpecial 
                     .is("parent_id", null)
                     .gte("date", `${first}-01`)
                     .lte("date", `${last}-${String(lastDay).padStart(2, '0')}`)
-                    .or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`),
+                    .in("user_id", partnerId ? [user.id, partnerId] : [user.id]),
             ]);
 
             const years = new Set(months.map(m => m.split('-')[0]));
@@ -78,7 +78,7 @@ export default function CashFlowChart({ selectedMonth, viewMode, excludeSpecial 
             setLoading(false);
         };
         fetchData();
-    }, [selectedMonth]);
+    }, [selectedMonth, partnerId]);
 
     const rawData = useMemo(() =>
         fetchedMonths.map(m => {

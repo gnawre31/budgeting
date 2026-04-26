@@ -12,7 +12,7 @@ function getLast6Months(endMonth) {
     });
 }
 
-export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], refreshKey = 0 }) {
+export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], refreshKey = 0, partnerId = null }) {
     const [rawExpenses, setRawExpenses] = useState([]);
     const [rawIncome, setRawIncome] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
@@ -34,7 +34,7 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
             const lastDay = new Date(parseInt(ly), parseInt(lm), 0).getDate();
 
             const expKey = cacheKey(user.id, "monthly_spend_range", first, last);
-            const incKey = cacheKey(user.id, "income_range", first, last);
+            const incKey = cacheKey(user.id, "income_range", first, last, partnerId ?? "solo");
             const cachedExp = cacheGet(expKey);
             const cachedInc = cacheGet(incKey);
 
@@ -48,7 +48,7 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
 
             const [{ data: expenses }, { data: income }] = await Promise.all([
                 supabase.from("monthly_category_spend").select("month, total_spent, self_spent, category").eq("user_id", user.id).gte("month", first).lte("month", last),
-                supabase.from("transactions").select("date, amount, self_amount, partner_amount, user_id, category").eq("type", "Income").eq("exclude_from_report", false).is("parent_id", null).gte("date", `${first}-01`).lte("date", `${last}-${String(lastDay).padStart(2, "0")}`).or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`),
+                supabase.from("transactions").select("date, amount, self_amount, partner_amount, user_id, category").eq("type", "Income").eq("exclude_from_report", false).is("parent_id", null).gte("date", `${first}-01`).lte("date", `${last}-${String(lastDay).padStart(2, "0")}`).in("user_id", partnerId ? [user.id, partnerId] : [user.id]),
             ]);
 
             const exp = expenses || [];
@@ -61,7 +61,7 @@ export default function SavingsRateTrend({ selectedMonth, viewMode, excludeSpeci
             setLoading(false);
         };
         fetch();
-    }, [selectedMonth, refreshKey]);
+    }, [selectedMonth, refreshKey, partnerId]);
 
     const rates = useMemo(() => {
         return months.map(m => {

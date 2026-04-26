@@ -15,7 +15,7 @@ function KPICard({ label, value, sub, color = "text-gray-900" }) {
     );
 }
 
-export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], fixedCategories = [], refreshKey = 0 }) {
+export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], fixedCategories = [], refreshKey = 0, partnerId = null }) {
     const [rawExpenses, setRawExpenses] = useState([]);
     const [rawIncome, setRawIncome] = useState([]);
     const [currentUserId, setCurrentUserId] = useState(null);
@@ -34,7 +34,7 @@ export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = fal
             const end = `${selectedMonth}-${String(lastDay).padStart(2, "0")}`;
 
             const expKey = cacheKey(user.id, "monthly_spend", selectedMonth);
-            const incKey = cacheKey(user.id, "income_txns", selectedMonth);
+            const incKey = cacheKey(user.id, "income_txns", selectedMonth, partnerId ?? "solo");
 
             const cachedExp = cacheGet(expKey);
             const cachedInc = cacheGet(incKey);
@@ -48,7 +48,7 @@ export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = fal
 
             const [{ data: expData }, { data: incData }] = await Promise.all([
                 supabase.from("monthly_category_spend").select("category, total_spent, self_spent").eq("user_id", user.id).eq("month", selectedMonth),
-                supabase.from("transactions").select("amount, self_amount, partner_amount, user_id, category").eq("type", "Income").eq("exclude_from_report", false).is("parent_id", null).gte("date", start).lte("date", end).or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`),
+                supabase.from("transactions").select("amount, self_amount, partner_amount, user_id, category").eq("type", "Income").eq("exclude_from_report", false).is("parent_id", null).gte("date", start).lte("date", end).in("user_id", partnerId ? [user.id, partnerId] : [user.id]),
             ]);
 
             const expenses = expData || [];
@@ -60,7 +60,7 @@ export default function KPIStrip({ selectedMonth, viewMode, excludeSpecial = fal
             setLoading(false);
         };
         fetch();
-    }, [selectedMonth, refreshKey]);
+    }, [selectedMonth, refreshKey, partnerId]);
 
     const { totalSpend, totalIncome, net, rate } = useMemo(() => {
         const filtered = rawExpenses

@@ -10,7 +10,7 @@ function getStatusKey(catSpent, activeBudget) {
     return "within";
 }
 
-export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [] }) {
+export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial = false, specialCategories = [], alwaysExcludedCategories = [], partnerId = null }) {
     const { expenseCategories } = useCategories();
 
     const [pacingData, setPacingData] = useState([]);
@@ -79,7 +79,7 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
                 .is("parent_id", null)
                 .gte("date", `${selectedMonth}-01`)
                 .lte("date", `${selectedMonth}-${String(lastDay).padStart(2, '0')}`)
-                .or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`);
+                .in("user_id", partnerId ? [user.id, partnerId] : [user.id]);
 
             const householdIncome = incomeData?.reduce((a, tx) => a + (tx.amount || 0), 0) || 0;
             const selfIncome = incomeData?.reduce((a, tx) => {
@@ -95,13 +95,13 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
                 ...(expenseData?.map(d => d.category).filter(c => !alwaysExcludedCategories.includes(c)) || []),
             ]);
             const merged = Array.from(allCategories).map(category => {
-                const db = expenseData?.find(d => d.category === category);
+                const rows = expenseData?.filter(d => d.category === category) ?? [];
                 return {
                     category,
                     budget:         budgets[category] || 0,
-                    self_amount:    db?.self_spent    || 0,
-                    partner_amount: db?.partner_spent || 0,
-                    total_amount:   db?.total_spent   || 0,
+                    self_amount:    rows.reduce((s, d) => s + (d.self_spent    || 0), 0),
+                    partner_amount: rows.reduce((s, d) => s + (d.partner_spent || 0), 0),
+                    total_amount:   rows.reduce((s, d) => s + (d.total_spent   || 0), 0),
                 };
             });
 
@@ -109,7 +109,7 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
             setLoading(false);
         };
         fetchData();
-    }, [selectedMonth, budgets, expenseCategories, alwaysExcludedCategories]);
+    }, [selectedMonth, budgets, expenseCategories, alwaysExcludedCategories, partnerId]);
 
     const saveBudget = (category) => {
         let val = Number(editValue) || 0;
@@ -243,9 +243,9 @@ export default function CategoryPacing({ selectedMonth, viewMode, excludeSpecial
                                         const partnerPct = (viewMode === "household" && hasBudget)
                                             ? Math.min((cat.partner_amount / activeBudget) * 100, 100 - selfPct) : 0;
 
-                                        const prevRecord = prevMonthData.find(d => d.category === cat.category);
-                                        const prevSpend  = prevRecord
-                                            ? (viewMode === "household" ? prevRecord.total_spent : prevRecord.self_spent) || 0 : 0;
+                                        const prevRows  = prevMonthData.filter(d => d.category === cat.category);
+                                        const prevSpend = prevRows.reduce((s, d) =>
+                                            s + ((viewMode === "household" ? d.total_spent : d.self_spent) || 0), 0);
                                         const delta = catSpent - prevSpend;
 
                                         const projected     = (isCurrentMonth && pacingPercent > 5)

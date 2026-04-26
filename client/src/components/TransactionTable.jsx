@@ -34,11 +34,15 @@ export default function TransactionTable() {
     const getCategoryOptions = (type) => type === "Income" ? incomeCategories : expenseCategories;
 
     const handleCategoryChange = (txId, newCategory) => {
-        const isMandatory = alwaysExcludedCategories.includes(newCategory);
-        updateTransaction(txId, {
-            category: newCategory,
-            exclude_from_report: isMandatory ? true : undefined
-        });
+        const isAlwaysExcluded = alwaysExcludedCategories.includes(newCategory);
+        const isIncome = incomeCategories.includes(newCategory);
+        const updates = { category: newCategory };
+        if (isAlwaysExcluded) {
+            // Income always-excluded (e.g. Reimbursement): keep false so reconcile can find it
+            // Expense always-excluded (e.g. Credit Card Payment): force true
+            updates.exclude_from_report = !isIncome;
+        }
+        updateTransaction(txId, updates);
     };
 
     const sortedTransactions = [...transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -161,7 +165,9 @@ export default function TransactionTable() {
                                                         updateTransaction(tx.id, {
                                                             type,
                                                             category: defaultCat,
-                                                            exclude_from_report: alwaysExcludedCategories.includes(defaultCat) ? true : tx.exclude_from_report
+                                                            exclude_from_report: alwaysExcludedCategories.includes(defaultCat)
+                                                ? !incomeCategories.includes(defaultCat)  // income always-excluded stays false; expense always-excluded becomes true
+                                                : tx.exclude_from_report
                                                         });
                                                     }}
                                                     className={`text-xs font-medium px-2.5 py-1 transition-colors whitespace-nowrap ${

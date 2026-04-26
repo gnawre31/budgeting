@@ -94,14 +94,31 @@ export default function ReconciliationView() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data, error } = await supabase
+        // Try with embedded parent join first; fall back if PostgREST
+        // hasn't cached the self-referential parent_id FK yet.
+        let result = await supabase
             .from("transactions")
-            .select(`*, parent:parent_id(merchant)`)
+            .select("*, parent:parent_id(merchant)")
             .eq("category", "Reimbursement")
             .eq("user_id", user.id)
             .order("date", { ascending: false });
 
-        if (!error) setReimbursements((data || []).filter(tx => !tx.is_partner_credit));
+        if (result.error) {
+            console.warn("loadReimbursements: join failed, retrying without it:", result.error.message);
+            result = await supabase
+                .from("transactions")
+                .select("*")
+                .eq("category", "Reimbursement")
+                .eq("user_id", user.id)
+                .order("date", { ascending: false });
+        }
+
+        if (result.error) {
+            console.error("loadReimbursements error:", result.error);
+            return;
+        }
+
+        setReimbursements((result.data || []).filter(tx => !tx.is_partner_credit));
     }, []);
 
     useEffect(() => { loadReimbursements(); }, [loadReimbursements]);
