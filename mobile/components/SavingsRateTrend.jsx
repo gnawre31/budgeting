@@ -40,6 +40,7 @@ export default function SavingsRateTrend({
   specialCategories = [],
   alwaysExcludedCategories = [],
   refreshKey = 0,
+  partnerId = null,
 }) {
   const [rawExpenses, setRawExpenses] = useState([]);
   const [rawIncome, setRawIncome] = useState([]);
@@ -65,7 +66,7 @@ export default function SavingsRateTrend({
       const lastDay = new Date(parseInt(ly), parseInt(lm), 0).getDate();
 
       const expKey = cacheKey(user.id, 'monthly_spend_range', first, last);
-      const incKey = cacheKey(user.id, 'income_range', first, last);
+      const incKey = cacheKey(user.id, 'income_range', first, last, partnerId ?? 'solo');
       const cachedExp = await cacheGet(expKey);
       const cachedInc = await cacheGet(incKey);
 
@@ -92,7 +93,7 @@ export default function SavingsRateTrend({
           .is('parent_id', null)
           .gte('date', `${first}-01`)
           .lte('date', `${last}-${String(lastDay).padStart(2, '0')}`)
-          .or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`),
+          .in('user_id', partnerId ? [user.id, partnerId] : [user.id]),
       ]);
 
       if (cancelled) return;
@@ -107,7 +108,7 @@ export default function SavingsRateTrend({
     };
     fetch();
     return () => { cancelled = true; };
-  }, [selectedMonth, refreshKey]);
+  }, [selectedMonth, refreshKey, partnerId]);
 
   const rates = useMemo(() => {
     return months.map((m) => {

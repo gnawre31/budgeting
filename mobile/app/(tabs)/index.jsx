@@ -134,7 +134,7 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
 
-  const { specialCategories, alwaysExcludedCategories, fixedCategories } = useCategories();
+  const { specialCategories, alwaysExcludedCategories, fixedCategories, partnerId } = useCategories();
 
   const currentMonth = getCurrentMonth();
 
@@ -180,6 +180,7 @@ export default function DashboardScreen() {
     specialCategories,
     alwaysExcludedCategories,
     refreshKey,
+    partnerId,
   };
 
   return (

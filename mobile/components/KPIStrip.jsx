@@ -40,6 +40,7 @@ export default function KPIStrip({
   alwaysExcludedCategories = [],
   fixedCategories = [],
   refreshKey = 0,
+  partnerId = null,
 }) {
   const [rawExpenses, setRawExpenses] = useState([]);
   const [rawIncome, setRawIncome] = useState([]);
@@ -62,7 +63,7 @@ export default function KPIStrip({
       const end = `${selectedMonth}-${String(lastDay).padStart(2, '0')}`;
 
       const expKey = cacheKey(user.id, 'monthly_spend', selectedMonth);
-      const incKey = cacheKey(user.id, 'income_txns', selectedMonth);
+      const incKey = cacheKey(user.id, 'income_txns', selectedMonth, partnerId ?? 'solo');
 
       const cachedExp = await cacheGet(expKey);
       const cachedInc = await cacheGet(incKey);
@@ -88,7 +89,7 @@ export default function KPIStrip({
           .is('parent_id', null)
           .gte('date', start)
           .lte('date', end)
-          .or(`user_id.eq.${user.id},and(partner_id.eq.${user.id},partner_amount.gt.0)`),
+          .in('user_id', partnerId ? [user.id, partnerId] : [user.id]),
       ]);
 
       if (cancelled) return;
@@ -102,7 +103,7 @@ export default function KPIStrip({
     };
     fetch();
     return () => { cancelled = true; };
-  }, [selectedMonth, refreshKey]);
+  }, [selectedMonth, refreshKey, partnerId]);
 
   const { totalSpend, totalIncome, net, rate } = useMemo(() => {
     const filtered = rawExpenses

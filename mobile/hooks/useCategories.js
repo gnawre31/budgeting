@@ -132,6 +132,7 @@ export function useCategories() {
     fixedCategories,
     loading,
     dbAvailable,
+    partnerId,
     addCategory,
     updateCategory,
     removeCategory,
